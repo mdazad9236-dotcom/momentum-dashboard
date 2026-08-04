@@ -15,7 +15,6 @@ login_manager.login_view = 'login'
 
 USERS = {
     "azad": generate_password_hash("1234"),
-    "rahul": generate_password_hash("5678"),
 }
 
 class User(UserMixin):
