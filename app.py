@@ -44,16 +44,20 @@ def get_momentum_data():
         if 'Date' not in df.columns:
             df['Date'] = df.iloc[:, 0]
         df['Date'] = pd.to_datetime(df['Date'])
+        
+        # YE LINE NAYI: Column naam chota-bada dono handle karega
+        df.columns = [c.lower() for c in df.columns]
+        
         results = []
-        for symbol in df['Stock'].unique():
-            stock_df = df[df['Stock'] == symbol].sort_values('Date')
+        for symbol in df['stock'].unique():
+            stock_df = df[df['stock'] == symbol].sort_values('date')
             if len(stock_df) < 90: continue
-            start_price = stock_df['Close'].iloc[-90]
-            end_price = stock_df['Close'].iloc[-1]
+            start_price = stock_df['close'].iloc[-90]
+            end_price = stock_df['close'].iloc[-1]
             ret_3m = ((end_price / start_price) - 1) * 100
-            results.append({"Stock": symbol, "Price": round(end_price,2), "3M Return %": round(ret_3m,2)})
+            results.append({"Stock": symbol.upper(), "Price": round(end_price,2), "3M Return %": round(ret_3m,2)})
         df_res = pd.DataFrame(results).sort_values("3M Return %", ascending=False)
-        last_update = pd.to_datetime(df['Date']).max().strftime('%d-%m-%Y')
+        last_update = pd.to_datetime(df['date']).max().strftime('%d-%m-%Y')
         return f"<p><b>Data till:</b> {last_update}</p>" + df_res.to_html(classes='table', index=False, border=0)
     except Exception as e:
         return f"<p style='color:red'>Error: {e}. 2 min baad refresh karo</p>"
