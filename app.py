@@ -21,7 +21,7 @@ def load_user(user_id): return User(user_id)
 
 def get_top_momentum_stocks():
     # Sirf 5 stock rakhe hai speed ke liye. Baad me badha dena
-    tickers = ["RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICIBANK.NS"]
+    tickers = ["RELIANCE.NS", "TCS.NS", "INFY.NS"]
     results = []
     for ticker in tickers:
         try:
