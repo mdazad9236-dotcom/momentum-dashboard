@@ -3,7 +3,7 @@ gunicorn
 pandas
 numpy
 flask-login
-smartapi-python
+smartconnect
 pyotp
 requests
 python-dotenv
