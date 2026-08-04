@@ -1,9 +1,5 @@
-flask
-gunicorn
+Flask
+Flask-Login
 pandas
-numpy
-flask-login
-smartapi-python
-pyotp
-requests
-python-dotenv
+nsepython
+gunicorn
