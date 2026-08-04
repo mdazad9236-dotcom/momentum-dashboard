@@ -1,5 +1,5 @@
 Flask
 Flask-Login
 pandas
-yfinance
-gunicorn
+requests
+werkzeug
