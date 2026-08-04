@@ -1,6 +1,7 @@
-    flask
-    yfinance
-    pandas
-    gunicorn
-    flask-login
-    numpy
+flask
+gunicorn
+yfinance
+pandas
+numpy
+flask-login
+plotly
