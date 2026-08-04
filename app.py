@@ -1,4 +1,27 @@
-import os
+def get_momentum_data():
+    download_data() # Pehli baar call hote hi data download
+    try:
+        df = pd.read_csv(DATA_FILE)
+        
+        # YE 2 LINE NAYI DAALO
+        if 'Date' not in df.columns:
+            df['Date'] = df.iloc[:, 0] # Pehla column hi Date hota hai
+        
+        df['Date'] = pd.to_datetime(df['Date'])
+        results = []
+        for symbol in df['Stock'].unique():
+            stock_df = df[df['Stock'] == symbol].sort_values('Date')
+            if len(stock_df) < 90: continue
+            start_price = stock_df['Close'].iloc[-90]
+            end_price = stock_df['Close'].iloc[-1]
+            ret_3m = ((end_price / start_price) - 1) * 100
+            results.append({"Stock": symbol, "Price": round(end_price,2), "3M Return %": round(ret_3m,2)})
+        df_res = pd.DataFrame(results).sort_values("3M Return %", ascending=False)
+        return df_res.to_html(classes='table', index=False, border=0)
+    except Exception as e:
+        return f"<p style='color:red'>Error: {e}</p>"
+        
+        import os
 os.environ['PYTHONUNBUFFERED'] = '1'
 
 from flask import Flask, render_template_string, request, redirect, url_for, flash
