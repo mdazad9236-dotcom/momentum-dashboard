@@ -59,43 +59,45 @@ input{padding:10px;width:95%;border:1px solid #ccc;border-radius:5px;margin-bott
 """
 
 # 5. CORE LOGIC - DATA FETCH
+NSE_TOP_50 = ["RELIANCE", "TCS", "HDFCBANK", "BHARTIARTL", "ICICIBANK", "HINDUNILVR", "INFY", "SBIN", "ITC", "KOTAKBANK"]
+
+import yfinance as yf
+
 def get_momentum_data():
     results = []
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json'
-    }
 
     for symbol in NSE_TOP_50:
         try:
-            # Step 1: NSE cookie lena zaroori hai
-            session = requests.Session()
-            session.get("https://www.nseindia.com", headers=headers, timeout=5)
+            ticker = yf.Ticker(symbol + ".NS")
+            hist = ticker.history(period="3mo")
+            if len(hist) < 2: continue
 
-            # Step 2: Stock data lena
-            url = f"https://www.nseindia.com/api/quote-equity?symbol={symbol}"
-            r = session.get(url, headers=headers, timeout=5).json()
-
-            name = r['info']['companyName']
-            price = float(r['priceInfo']['lastPrice'])
-            ret_3m = r['priceInfo'].get('pChange3M', 0) # 3 Month change
+            price = hist['Close'].iloc[-1]
+            price_3m_ago = hist['Close'].iloc[0]
+            ret_3m = ((price - price_3m_ago) / price_3m_ago) * 100
+            name = ticker.info.get('longName', symbol)
 
             results.append({"Stock": name, "Price": round(price,2), "3M Return %": round(ret_3m,2)})
         except:
-            continue # Ek stock fail hua to dusra try karo
+            continue
 
-    # Agar API se data nahi aaya to Demo data
     if len(results) < 3:
         results = DUMMY_DATA
-        note = "<p class='note-orange'><b>Note:</b> Live API slow/block hai. Demo data dikh raha hai</p>"
+        note = "<p class='note-orange'><b>Note:</b> API slow hai. Demo data</p>"
     else:
-        note = "<p class='note-green'><b>Note:</b> Live NSE Data</p>"
+        note = "<p class='note-green'><b>Note:</b> Live yFinance Data</p>"
 
-    df_res = pd.DataFrame(results).sort_values("3M Return %", ascending=False).head(5)
+    results.sort(key=lambda x: x["3M Return %"], reverse=True)
+    results = results[:5]
+
+    table_rows = ""
+    for row in results:
+        color = "green" if row['3M Return %'] > 0 else "red"
+        table_rows += f"<tr><td>{row['Stock']}</td><td>{row['Price']}</td><td style='color:{color};font-weight:bold'>{row['3M Return %']}%</td></tr>"
+
+    table_html = f"<table class='table'><tr><th>Stock</th><th>Price</th><th>3M Return %</th></tr>{table_rows}</table>"
     last_update = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
-    table_html = df_res.to_html(classes='table', index=False, border=0)
     return note + f"<p><b>Data till:</b> {last_update}</p>" + table_html
-
 # 6. ROUTES
 @app.route('/')
 def home():
