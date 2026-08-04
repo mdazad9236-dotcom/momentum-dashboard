@@ -28,14 +28,23 @@ def get_momentum_data():
     results = []
     for symbol in STOCKS:
         try:
-            hist = nse_history(symbol, "EQ", "90")
-            if hist.empty: continue
+            hist = nse_eq(symbol)
+            if hist is None or hist.empty:
+                continue
             hist['CHG'] = pd.to_numeric(hist['CHG'], errors='coerce')
-            ret_3m = ((hist['CHG'].iloc[-1] / hist['CHG'].iloc[0]) - 1) * 100
+            start_price = hist['CHG'].iloc[0]
+            end_price = hist['CHG'].iloc[-1]
+            ret_3m = ((end_price / start_price) - 1) * 100
             quote = nse_quote(symbol)
             ltp = quote['priceInfo']['lastPrice']
             results.append({"Stock": symbol, "Price": round(ltp,2), "3M Return %": round(ret_3m,2)})
-        except: pass
+        except Exception as e:
+            print(f"{symbol} Error: {e}")
+            pass
+
+    if not results: # Agar data nahi mila to ye dikhayega
+        return "<p style='color:red'>NSE se data nahi mil raha. 1 min baad refresh karo. NSE kabhi kabhi block kar deta hai.</p>"
+
     df_res = pd.DataFrame(results).sort_values("3M Return %", ascending=False)
     return df_res.to_html(classes='table', index=False, border=0)
 
