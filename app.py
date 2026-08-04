@@ -29,11 +29,12 @@ def download_data():
         print("Downloading data for first time...")
         all_data = []
         for symbol in STOCKS:
-            data = yf.download(symbol, period="5y", interval="1d", progress=False)
+            data = yf.download(symbol, period="5y", interval="1d", progress=False, auto_adjust=True)
+            data.reset_index(inplace=True)
             data['Stock'] = symbol.replace('.NS','')
             all_data.append(data)
         df = pd.concat(all_data)
-        df.reset_index(inplace=True)
+        df.columns = ['_'.join(col).strip('_') if isinstance(col, tuple) else col for col in df.columns] # MultiIndex fix
         df.to_csv(DATA_FILE, index=False)
         print("Download complete!")
 
@@ -41,26 +42,29 @@ def get_momentum_data():
     download_data()
     try:
         df = pd.read_csv(DATA_FILE)
-        if 'Date' not in df.columns:
-            df['Date'] = df.iloc[:, 0]
         df['Date'] = pd.to_datetime(df['Date'])
         
-        # YE LINE NAYI: Column naam chota-bada dono handle karega
-        df.columns = [c.lower() for c in df.columns]
+        # Agar Adj Close hai to use karo
+        if 'Adj Close' in df.columns:
+            df['Close'] = df['Adj Close']
         
         results = []
-        for symbol in df['stock'].unique():
-            stock_df = df[df['stock'] == symbol].sort_values('date')
+        for symbol in df['Stock'].unique():
+            stock_df = df[df['Stock'] == symbol].sort_values('Date')
             if len(stock_df) < 90: continue
-            start_price = stock_df['close'].iloc[-90]
-            end_price = stock_df['close'].iloc[-1]
+            
+            stock_df = stock_df.dropna(subset=['Close'])
+            
+            start_price = stock_df['Close'].iloc[-90]
+            end_price = stock_df['Close'].iloc[-1]
             ret_3m = ((end_price / start_price) - 1) * 100
-            results.append({"Stock": symbol.upper(), "Price": round(end_price,2), "3M Return %": round(ret_3m,2)})
+            results.append({"Stock": symbol, "Price": round(end_price,2), "3M Return %": round(ret_3m,2)})
+            
         df_res = pd.DataFrame(results).sort_values("3M Return %", ascending=False)
-        last_update = pd.to_datetime(df['date']).max().strftime('%d-%m-%Y')
+        last_update = pd.to_datetime(df['Date']).max().strftime('%d-%m-%Y')
         return f"<p><b>Data till:</b> {last_update}</p>" + df_res.to_html(classes='table', index=False, border=0)
     except Exception as e:
-        return f"<p style='color:red'>Error: {e}. 2 min baad refresh karo</p>"
+        return f"<p style='color:red'>Error: {e}</p>"
 
 BASE = "<style>body{font-family:sans-serif;background:#f4f7f9;margin:0}.container{max-width:900px;margin:20px auto;background:white;padding:20px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1)}.table{width:100%;border-collapse:collapse}.table th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left}.table th{background:#007bff;color:white}.btn{background:#007bff;color:white;padding:10px 15px;border-radius:5px;text-decoration:none;border:none;display:inline-block;margin:5px 0}.btn-danger{background:red}</style>"
 
@@ -82,6 +86,5 @@ def dashboard(): return render_template_string(BASE + f"<div class=container><h1
 @app.route('/logout')
 @login_required
 def logout(): logout_user(); return redirect(url_for('login'))
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
