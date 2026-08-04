@@ -1,6 +1,9 @@
 flask
 gunicorn
-yfinance
 pandas
 numpy
 flask-login
+smartapi-python
+pyotp
+requests
+python-dotenv
