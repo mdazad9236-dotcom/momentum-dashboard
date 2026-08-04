@@ -10,7 +10,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
-load_dotenv() #.env file read karega
+load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = 'momentum_secret_2026'
@@ -30,10 +30,10 @@ def load_user(user_id): return User(user_id)
 # ===== ANGLEONE LOGIN =====
 def get_angel_client():
     try:
-        api_key = os.environ.get("ymEm01h7")
-        client_code = os.environ.get("M1025612")
-        password = os.environ.get("7439")
-        totp_secret = os.environ.get("UC27CK2C4YYKOEHKPT543XHOYI")
+        api_key = "ymEm01h7"
+        client_code = "M1025612"
+        password = "7439"
+        totp_secret = "UC27CK2C4YYKOEHKPT543XHOYI"
 
         smartApi = SmartConnect(api_key=api_key)
         totp = pyotp.TOTP(totp_secret).now()
@@ -54,7 +54,7 @@ STOCKS = {
 
 def get_momentum_data():
     smartApi = get_angel_client()
-    if not smartApi: return "<p>AngleOne Login Failed..env check karo</p>"
+    if not smartApi: return "<p style='color:red'>AngleOne Login Failed</p>"
 
     to_date = datetime.now()
     from_date = to_date - timedelta(days=90)
@@ -70,6 +70,7 @@ def get_momentum_data():
                 "todate": to_date.strftime("%Y-%m-%d %H:%M")
             })
             df = pd.DataFrame(data['data'], columns=['time','o','h','l','c','v'])
+            df['c'] = df['c'].astype(float)
             ret_3m = ((df['c'].iloc[-1] / df['c'].iloc[0]) - 1) * 100
             results.append({"Stock": name, "Price": round(df['c'].iloc[-1],2), "3M Return %": round(ret_3m,2)})
         except: pass
@@ -81,7 +82,7 @@ def get_momentum_data():
 def get_chart_url(ticker):
     return f"https://charting.tradingview.com/chart.html?symbol=NSE:{ticker}"
 
-BASE = "<style>body{font-family:sans-serif;background:#f4f7f9}.container{max-width:900px;margin:20px auto;background:white;padding:20px;border-radius:10px}.table{width:100%}.table th,td{padding:8px}.btn{background:#007bff;color:white;padding:10px;border-radius:5px;text-decoration:none}</style>"
+BASE = "<style>body{font-family:sans-serif;background:#f4f7f9}.container{max-width:900px;margin:20px auto;background:white;padding:20px;border-radius:10px}.table{width:100%}.table th,td{padding:8px;border-bottom:1px solid #ddd}.btn{background:#007bff;color:white;padding:10px 15px;border-radius:5px;text-decoration:none;border:none}</style>"
 
 @app.route('/')
 def home(): return redirect(url_for('login'))
@@ -91,8 +92,8 @@ def login():
     if request.method == 'POST':
         u,p = request.form['username'], request.form['password']
         if u in USERS and check_password_hash(USERS[u], p): login_user(User(u)); return redirect(url_for('menu'))
-        flash('Galat Password')
-    return render_template_string(BASE + "<div class=container><h2>Login</h2><form method=post><input name=username placeholder=Username><br><br><input name=password type=password placeholder=Password><br><br><button class=btn>Login</button></form></div>")
+        flash('Galat Username ya Password')
+    return render_template_string(BASE + "<div class=container><h2>Login</h2><form method=post><input name=username placeholder=Username required><br><br><input name=password type=password placeholder=Password required><br><br><button class=btn>Login</button></form></div>")
 
 @app.route('/menu')
 @login_required
