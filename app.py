@@ -5,7 +5,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, fla
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import pandas as pd
-from nsepython import nse_quote, nse_history
+from nsepython import nse_quote, nse_eq
 
 app = Flask(__name__)
 app.secret_key = 'momentum_secret_2026'
