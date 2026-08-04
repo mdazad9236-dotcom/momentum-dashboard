@@ -71,82 +71,83 @@ body{font-family:'Poppins', sans-serif;background:#f4f7fc;margin:0;padding:0}
 """
 
 # 5. CORE LOGIC - DATA FETCH
-from cachetools import TTLCache
-import time
-
-cache = TTLCache(maxsize=100, ttl=1800) # 30 min ka cache
-
-NSE_TOP_10 = ["RELIANCE", "TCS", "HDFCBANK", "BHARTIARTL", "ICICIBANK", "HINDUNILVR", "INFY", "SBIN", "ITC", "KOTAKBANK"]
-
-def get_momentum_data():
-    if 'momentum_data' in cache: # Agar cache me hai to wahi de do
-        results = cache['momentum_data']
-        note = "<p class='note-green'><b>Note:</b> Cached Data - 30 min me update hoga</p>"
-    else:
-        results = []
-        for symbol in NSE_TOP_10: # 50 nahi, 10 hi
-            try:
-                ticker = yf.Ticker(symbol + ".NS")
-                hist = ticker.history(period="3mo")
-                if len(hist) < 2: continue
-                price = hist['Close'].iloc[-1]
-                price_3m_ago = hist['Close'].iloc[0]
-                ret_3m = ((price - price_3m_ago) / price_3m_ago) * 100
-                name = ticker.info.get('longName', symbol)
-                results.append({"Stock": name, "Price": round(price,2), "3M Return %": round(ret_3m,2)})
-                time.sleep(0.2) # API block na ho isliye thoda rukna
-            except:
-                continue
-        
-        if len(results) >= 3:
-            cache['momentum_data'] = results # Cache me save
-            note = "<p class='note-green'><b>Note:</b> Live yFinance Data</p>"
-        else:
-            results = DUMMY_DATA
-            note = "<p class='note-orange'><b>Note:</b> API slow hai. Demo data</p>"
-
-    results.sort(key=lambda x: x["3M Return %"], reverse=True)
-    results = results[:5]
-
-    table_rows = ""
-    for row in results:
-        color = "green" if row['3M Return %'] > 0 else "red"
-        table_rows += f"<tr><td>{row['Stock']}</td><td>₹{row['Price']}</td><td style='color:{color};font-weight:bold'>{row['3M Return %']}%</td></tr>"
-
-    table_html = f"<table class='table'><tr><th>Stock</th><th>Price</th><th>3M Return %</th></tr>{table_rows}</table>"
-    last_update = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
-    return note + f"<p><b>Data till:</b> {last_update}</p>" + table_html
-# 6. ROUTES
-@app.route('/')
-def home():
-    return redirect(url_for('login'))
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        if username in USERS and check_password_hash(USERS[username], password):
-            login_user(User(username))
-            return redirect(url_for('menu'))
-        flash('Galat Username ya Password')
-
-    login_form = f"{BASE_CSS}<div class=container><h2>Login to Momentum Dashboard</h2><form method=post><input name=username placeholder='Username: azad' required><br><input name=password type=password placeholder='Password: 1234' required><br><button class=btn>Login</button></form></div>"
-    return render_template_string(login_form)
-
-@app.route('/menu')
-@login_required
-def menu():
-    menu_page = f"{BASE_CSS}<div class=container><h1>Welcome {current_user.id}</h1><h2>Main Menu</h2><a href=/dashboard class=btn>1. NSE Momentum Dashboard</a><br><a href=/logout class=btn btn-danger>Logout</a></div>"
-    return render_template_string(menu_page)
-
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    data_html = get_momentum_data()
-    dashboard_page = f"{BASE_CSS}<div class=container><h1>Top 5 NSE Momentum Stocks - Last 3 Months</h1>{data_html}<br><a href=/dashboard class=btn>Refresh Data</a><a href=/menu class=btn>Back to Menu</a></div>"
-    return render_template_string(dashboard_page)
+    period = request.args.get('period', '3mo') # URL se period lega?period=1mo
+    top_gainer, data_html = get_momentum_data(period)
 
+    dashboard_page = f"""{BASE_CSS}
+    <div class="header">
+        <h1>📈 Momentum Dashboard</h1>
+        <a href=/logout class="btn btn-danger">Logout</a>
+    </div>
+    <div class=container>
+        <div class="top-card">
+            <div>
+                <h2>Top Gainer - Last {period.upper()}</h2>
+                <p>{top_gainer['Stock']}</p>
+            </div>
+            <div class="value">{top_gainer['Return %']}%</div>
+        </div>
+
+        <h1>Top 5 NSE Momentum Stocks</h1>
+        
+        <form method="get" style="margin-bottom:20px">
+            <label><b>Timeframe:</b> </label>
+            <select name="period" onchange="this.form.submit()" style="padding:8px;border-radius:6px;border:1px solid #ccc">
+                <option value="1mo" {"selected" if period=="1mo" else ""}>1 Month</option>
+                <option value="3mo" {"selected" if period=="3mo" else ""}>3 Months</option>
+                <option value="6mo" {"selected" if period=="6mo" else ""}>6 Months</option>
+                <option value="1y" {"selected" if period=="1y" else ""}>1 Year</option>
+            </select>
+        </form>
+
+        {data_html}
+        <br>
+        <a href=/dashboard class=btn>🔄 Refresh Data</a>
+        <a href=/menu class=btn>🏠 Back to Menu</a>
+    </div>"""
+    return render_template_string(dashboard_page)
+# 6. ROUTES
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    period = request.args.get('period', '3mo') # URL se period lega?period=1mo
+    top_gainer, data_html = get_momentum_data(period)
+
+    dashboard_page = f"""{BASE_CSS}
+    <div class="header">
+        <h1>📈 Momentum Dashboard</h1>
+        <a href=/logout class="btn btn-danger">Logout</a>
+    </div>
+    <div class=container>
+        <div class="top-card">
+            <div>
+                <h2>Top Gainer - Last {period.upper()}</h2>
+                <p>{top_gainer['Stock']}</p>
+            </div>
+            <div class="value">{top_gainer['Return %']}%</div>
+        </div>
+
+        <h1>Top 5 NSE Momentum Stocks</h1>
+        
+        <form method="get" style="margin-bottom:20px">
+            <label><b>Timeframe:</b> </label>
+            <select name="period" onchange="this.form.submit()" style="padding:8px;border-radius:6px;border:1px solid #ccc">
+                <option value="1mo" {"selected" if period=="1mo" else ""}>1 Month</option>
+                <option value="3mo" {"selected" if period=="3mo" else ""}>3 Months</option>
+                <option value="6mo" {"selected" if period=="6mo" else ""}>6 Months</option>
+                <option value="1y" {"selected" if period=="1y" else ""}>1 Year</option>
+            </select>
+        </form>
+
+        {data_html}
+        <br>
+        <a href=/dashboard class=btn>🔄 Refresh Data</a>
+        <a href=/menu class=btn>🏠 Back to Menu</a>
+    </div>"""
+    return render_template_string(dashboard_page)
 @app.route('/logout')
 @login_required
 def logout():
