@@ -59,33 +59,39 @@ input{padding:10px;width:95%;border:1px solid #ccc;border-radius:5px;margin-bott
 """
 
 # 5. CORE LOGIC - DATA FETCH
-NSE_TOP_50 = ["RELIANCE", "TCS", "HDFCBANK", "BHARTIARTL", "ICICIBANK", "HINDUNILVR", "INFY", "SBIN", "ITC", "KOTAKBANK"]
+from cachetools import TTLCache
+import time
 
-import yfinance as yf
+cache = TTLCache(maxsize=100, ttl=1800) # 30 min ka cache
+
+NSE_TOP_10 = ["RELIANCE", "TCS", "HDFCBANK", "BHARTIARTL", "ICICIBANK", "HINDUNILVR", "INFY", "SBIN", "ITC", "KOTAKBANK"]
 
 def get_momentum_data():
-    results = []
-
-    for symbol in NSE_TOP_50:
-        try:
-            ticker = yf.Ticker(symbol + ".NS")
-            hist = ticker.history(period="3mo")
-            if len(hist) < 2: continue
-
-            price = hist['Close'].iloc[-1]
-            price_3m_ago = hist['Close'].iloc[0]
-            ret_3m = ((price - price_3m_ago) / price_3m_ago) * 100
-            name = ticker.info.get('longName', symbol)
-
-            results.append({"Stock": name, "Price": round(price,2), "3M Return %": round(ret_3m,2)})
-        except:
-            continue
-
-    if len(results) < 3:
-        results = DUMMY_DATA
-        note = "<p class='note-orange'><b>Note:</b> API slow hai. Demo data</p>"
+    if 'momentum_data' in cache: # Agar cache me hai to wahi de do
+        results = cache['momentum_data']
+        note = "<p class='note-green'><b>Note:</b> Cached Data - 30 min me update hoga</p>"
     else:
-        note = "<p class='note-green'><b>Note:</b> Live yFinance Data</p>"
+        results = []
+        for symbol in NSE_TOP_10: # 50 nahi, 10 hi
+            try:
+                ticker = yf.Ticker(symbol + ".NS")
+                hist = ticker.history(period="3mo")
+                if len(hist) < 2: continue
+                price = hist['Close'].iloc[-1]
+                price_3m_ago = hist['Close'].iloc[0]
+                ret_3m = ((price - price_3m_ago) / price_3m_ago) * 100
+                name = ticker.info.get('longName', symbol)
+                results.append({"Stock": name, "Price": round(price,2), "3M Return %": round(ret_3m,2)})
+                time.sleep(0.2) # API block na ho isliye thoda rukna
+            except:
+                continue
+        
+        if len(results) >= 3:
+            cache['momentum_data'] = results # Cache me save
+            note = "<p class='note-green'><b>Note:</b> Live yFinance Data</p>"
+        else:
+            results = DUMMY_DATA
+            note = "<p class='note-orange'><b>Note:</b> API slow hai. Demo data</p>"
 
     results.sort(key=lambda x: x["3M Return %"], reverse=True)
     results = results[:5]
@@ -93,7 +99,7 @@ def get_momentum_data():
     table_rows = ""
     for row in results:
         color = "green" if row['3M Return %'] > 0 else "red"
-        table_rows += f"<tr><td>{row['Stock']}</td><td>{row['Price']}</td><td style='color:{color};font-weight:bold'>{row['3M Return %']}%</td></tr>"
+        table_rows += f"<tr><td>{row['Stock']}</td><td>₹{row['Price']}</td><td style='color:{color};font-weight:bold'>{row['3M Return %']}%</td></tr>"
 
     table_html = f"<table class='table'><tr><th>Stock</th><th>Price</th><th>3M Return %</th></tr>{table_rows}</table>"
     last_update = datetime.now().strftime('%d-%m-%Y %H:%M:%S')
