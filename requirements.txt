@@ -1,4 +1,6 @@
-flask
-yfinance
-pandas
-gunicorn
+    flask
+    yfinance
+    pandas
+    gunicorn
+    flask-login
+    werkzeug
