@@ -42,19 +42,31 @@ DUMMY_DATA = [
 # 4. CSS - Better UI
 BASE_CSS = """
 <style>
-body{font-family:'Segoe UI', sans-serif;background:#eef2f7;margin:0;padding:20px}
-.container{max-width:950px;margin:20px auto;background:white;padding:25px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1)}
-h1,h2{color:#1a365d}
-.table{width:100%;border-collapse:collapse;margin-top:15px}
-.table th{background:#2563eb;color:white;padding:12px;text-align:left;font-size:15px}
-.table td{padding:10px;border-bottom:1px solid #e2e8f0}
-.table tr:hover{background:#f1f7ff}
-.btn{background:#2563eb;color:white;padding:10px 18px;border-radius:6px;text-decoration:none;border:none;cursor:pointer;display:inline-block;margin:5px 0;font-weight:600}
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+body{font-family:'Poppins', sans-serif;background:#f4f7fc;margin:0;padding:0}
+.header{background:linear-gradient(90deg, #2563eb, #1d4ed8);color:white;padding:15px 25px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+.header h1{margin:0;font-size:20px}
+.container{max-width:1100px;margin:25px auto;background:white;padding:25px;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,0.08)}
+.top-card{background:linear-gradient(135deg, #10b981, #059669);color:white;padding:20px;border-radius:12px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+.top-card h2{margin:0;font-size:18px}
+.top-card .value{font-size:28px;font-weight:700}
+.grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:15px;margin-bottom:25px}
+.stat-card{background:#f9fafb;padding:15px;border-radius:10px;border-left:4px solid #2563eb}
+.stat-card .label{color:#6b7280;font-size:13px}
+.stat-card .value{font-size:20px;font-weight:700;color:#1f2937}
+.table{width:100%;border-collapse:collapse;margin-top:15px;border-radius:8px;overflow:hidden}
+.table th{background:#2563eb;color:white;padding:14px;text-align:left;font-weight:600}
+.table td{padding:12px;border-bottom:1px solid #e5e7eb}
+.table tr:hover{background:#eff6ff}
+.positive{color:#059669;font-weight:700}
+.negative{color:#dc2626;font-weight:700}
+.btn{background:#2563eb;color:white;padding:10px 20px;border-radius:8px;text-decoration:none;border:none;cursor:pointer;font-weight:600;margin-right:10px}
 .btn:hover{background:#1d4ed8}
 .btn-danger{background:#dc2626}.btn-danger:hover{background:#b91c1c}
-.flash{background:#fef3c7;color:#92400e;padding:10px;border-radius:5px;margin-bottom:15px}
-.note-green{color:green;font-weight:600}.note-orange{color:orange;font-weight:600}
-input{padding:10px;width:95%;border:1px solid #ccc;border-radius:5px;margin-bottom:10px}
+.note-green{color:#059669;font-weight:600}.note-orange{color:#d97706;font-weight:600}
+.loader{border:4px solid #f3f3f3;border-top:4px solid #2563eb;border-radius:50%;width:30px;height:30px;animation:spin 1s linear infinite;margin:20px auto}
+@keyframes spin {0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); }}
+@media(max-width:768px){.container{margin:10px;padding:15px}}
 </style>
 """
 
