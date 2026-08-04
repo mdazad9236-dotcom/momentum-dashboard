@@ -32,20 +32,29 @@ def get_momentum_data():
     for symbol in NSE_TOP_50:
         try:
             url = f"https://priceapi.moneycontrol.com/pricefeed/nse/equitycash/{symbol}"
-            r = requests.get(url, headers=headers, timeout=5).json()
+            r = requests.get(url, headers=headers, timeout=3).json()
             data = r['data']
-            
             name = data['companyName']
             price = float(data['pricecurrent'])
             ret_3m = float(data['pricepercentchange3m'])
-
             results.append({"Stock": name, "Price": round(price,2), "3M Return %": round(ret_3m,2)})
         except:
-            continue
+            continue # Error aaya to skip kar do
+
+    # YE LINE NAYI JODI HAI - Agar results khali hai to demo data do
+    if len(results) == 0:
+        results = [
+            {"Stock": "HDFCBANK", "Price": 1650.25, "3M Return %": 18.4},
+            {"Stock": "RELIANCE", "Price": 2950.10, "3M Return %": 15.2},
+            {"Stock": "TCS", "Price": 3800.50, "3M Return %": 12.8},
+        ]
+        note = "<p style='color:orange'><b>Note:</b> Live API block hai. Demo data dikh raha hai</p>"
+    else:
+        note = ""
 
     df_res = pd.DataFrame(results).sort_values("3M Return %", ascending=False).head(5)
     last_update = datetime.now().strftime('%d-%m-%Y %H:%M')
-    return f"<p><b>Live NSE Data till:</b> {last_update}</p>" + df_res.to_html(classes='table', index=False, border=0)
+    return note + f"<p><b>Data till:</b> {last_update}</p>" + df_res.to_html(classes='table', index=False, border=0)
 
 BASE = "<style>body{font-family:sans-serif;background:#f4f7f9;margin:0}.container{max-width:900px;margin:20px auto;background:white;padding:20px;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1)}.table{width:100%;border-collapse:collapse}.table th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left}.table th{background:#007bff;color:white}.btn{background:#007bff;color:white;padding:10px 15px;border-radius:5px;text-decoration:none;border:none;display:inline-block;margin:5px 0}.btn-danger{background:red}</style>"
 
