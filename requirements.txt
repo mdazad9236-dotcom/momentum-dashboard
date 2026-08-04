@@ -3,4 +3,4 @@
     pandas
     gunicorn
     flask-login
-    werkzeug
+    numpy
