@@ -120,7 +120,7 @@ export default function StockDashboard() {
               </span>
             </div>
             <p className="text-gray-400 text-xs mb-3">{stock.name}</p>
-            <p className="text-xl font-bold mb-4">₹{stock.price}</p>
+            f"<p class='text-xl font-bold mb-4'>\u20b9{stock['price']}</p>"
 
             {/* Hyperlinks for Manual Stock Checks */}
             <div className="flex gap-2 text-xs border-t border-neutral-700 pt-3">
