@@ -63,7 +63,7 @@ def scan_top_predictions():
     if now - CACHE_TIMESTAMP < CACHE_EXPIRY and LATEST_STOCK_PREDICTIONS:
         return LATEST_STOCK_PREDICTIONS
 
-    tickers_data = yf.download(tickers=NSE_STOCKS, period="3m", interval="1d", progress=False)
+    tickers_data = yf.download(tickers, period="1d", interval="1m")
     results = []
 
     for stock in NSE_STOCKS:
@@ -476,8 +476,8 @@ def dashboard(request: Request):
         </div>
 
         <script>
-            // AUTO-REFRESH TIMER (EXACTLY 10 SECONDS)
-            let countdown = 10;
+            // AUTO-REFRESH TIMER (EXACTLY 60 SECONDS)
+            let countdown = 60;
             const timerElement = document.getElementById('countdown');
 
             setInterval(() => {{
