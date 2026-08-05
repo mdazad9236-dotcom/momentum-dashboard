@@ -2,6 +2,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 import yfinance as yf
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
+import json
 
 app = Flask(__name__)
 app.secret_key = "md_azad_momentum_dashboard_key"
@@ -12,17 +13,18 @@ USERS = {
     "mdazad": "password01"
 }
 
-# Expanded scan pool of prominent NSE/BSE stocks
+# Expanded scan pool containing your requested stocks, indices & heavyweights
 SCAN_POOL = [
-    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS", "INFY.NS",
-    "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "LTIM.NS", "AXISBANK.NS",
-    "KOTAKBANK.NS", "LT.NS", "ASIANPAINT.NS", "MARUTI.NS", "TITAN.NS",
-    "SUNPHARMA.NS", "BAJFINANCE.NS", "NTPC.NS", "POWERGRID.NS", "TATASTEEL.NS",
-    "JSWSTEEL.NS", "GRASIM.NS", "TECHM.NS", "HCLTECH.NS", "WIPRO.NS",
-    "INDUSINDBK.NS", "BAJAJFINSV.NS", "BPCL.NS", "IOC.NS", "COALINDIA.NS",
-    "TATAMOTORS.NS", "ADANIENT.NS", "ADANIPORTS.NS", "DIVISLAB.NS", "CIPLA.NS",
-    "DRREDDY.NS", "BRITANNIA.NS", "EICHERMOT.NS", "HEROMOTOCO.NS", "APOLLOHOSP.NS",
-    "ULTRACEMCO.NS", "NESTLEIND.NS", "SBILIFE.NS", "HDFCLIFE.NS", "ZOMATO.NS",
+    # Requested Stocks & Indices
+    "TCS.NS", "IRFC.NS", "LEMONTREE.NS", "WIPRO.NS", 
+    # Sector Indices & Heavyweights
+    "^CNXPHARMA", "^CNXENERGY", "RELIANCE.NS", "HDFCBANK.NS", "ICICIBANK.NS", 
+    "INFY.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "AXISBANK.NS", 
+    "KOTAKBANK.NS", "LT.NS", "ASIANPAINT.NS", "MARUTI.NS", "TITAN.NS", 
+    "SUNPHARMA.NS", "BAJFINANCE.NS", "NTPC.NS", "POWERGRID.NS", "TATASTEEL.NS", 
+    "JSWSTEEL.NS", "TECHM.NS", "HCLTECH.NS", "INDUSINDBK.NS", "BPCL.NS", 
+    "IOC.NS", "COALINDIA.NS", "TATAMOTORS.NS", "ADANIENT.NS", "ADANIPORTS.NS", 
+    "DIVISLAB.NS", "CIPLA.NS", "DRREDDY.NS", "BRITANNIA.NS", "ZOMATO.NS", 
     "SUZLON.NS", "IDFCFIRSTB.NS", "PNB.NS", "VEDL.NS", "TATAPOWER.NS"
 ]
 
@@ -30,13 +32,17 @@ def fetch_single_stock(ticker):
     try:
         stock = yf.Ticker(ticker)
         df = stock.history(period="1mo")
-        if df.empty or len(df) < 15:
+        if df.empty or len(df) < 10:
             return None
             
         current_price = float(df['Close'].iloc[-1])
         prev_close = float(stock.info.get('previousClose', df['Close'].iloc[-2]))
         change = ((current_price - prev_close) / prev_close) * 100
         
+        # Extract chart history dates and close prices for Chart.js
+        chart_dates = [d.strftime('%d %b') for d in df.index]
+        chart_prices = [round(float(p), 2) for p in df['Close']]
+
         # RSI calculation
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -58,9 +64,10 @@ def fetch_single_stock(ticker):
         score = min(score, 98)
         
         pe_ratio = round(float(stock.info.get('trailingPE', 22.5) or 22.5), 2)
+        clean_name = ticker.replace(".NS", "").replace("^CNX", "Index: ")
         
         return {
-            "symbol": ticker.replace(".NS", ""),
+            "symbol": clean_name,
             "price": round(current_price, 2),
             "change": round(change, 2),
             "rsi": current_rsi,
@@ -69,14 +76,15 @@ def fetch_single_stock(ticker):
             "pe": pe_ratio,
             "technical": "Strong Momentum" if score > 75 else "Consolidating Range",
             "fundamental": "Undervalued Growth" if pe_ratio < 30 else "Fairly Valued",
-            "return": f"+{score // 4}% to +{(score // 4) + 8}% (6 Mo)"
+            "return": f"+{score // 4}% to +{(score // 4) + 8}% (6 Mo)",
+            "chart_dates": chart_dates,
+            "chart_prices": chart_prices
         }
     except Exception:
         return None
 
 def scan_stocks_parallel():
     results = []
-    # Multithreading scan for high performance across full 50+ list
     with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_ticker = {executor.submit(fetch_single_stock, t): t for t in SCAN_POOL}
         for future in future_to_ticker:
@@ -85,9 +93,8 @@ def scan_stocks_parallel():
                 results.append(res)
                 
     results = sorted(results, key=lambda x: x['score'], reverse=True)
-    marquee_stocks = [s for s in results if s['price'] < 500]
-    top_10_stocks = results[:10]
-    return marquee_stocks, top_10_stocks
+    marquee_stocks = [s for s in results if s['price'] < 1000]
+    return marquee_stocks, results
 
 TEMPLATE = """
 <!DOCTYPE html>
@@ -95,7 +102,9 @@ TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NSE/BSE Live Momentum Dashboard - Md Azad</title>
+    <title>NSE/BSE Momentum Dashboard - Md Azad</title>
+    <!-- Include Chart.js for interactive stock charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             background-color: #0b0e14;
@@ -104,7 +113,6 @@ TEMPLATE = """
             margin: 0;
             padding: 0;
         }
-        /* Top Navigation Bar */
         .top-navbar {
             background-color: #161b22;
             padding: 10px 20px;
@@ -136,8 +144,6 @@ TEMPLATE = """
             color: #00ffa3;
             font-weight: bold;
         }
-        
-        /* News Ticker Bar */
         .news-ticker {
             background-color: #1f242c;
             color: #f0f6fc;
@@ -149,9 +155,8 @@ TEMPLATE = """
         }
         .news-content {
             display: inline-block;
-            animation: marquee 30s linear infinite;
+            animation: marquee 35s linear infinite;
         }
-
         .container {
             padding: 20px;
         }
@@ -159,8 +164,6 @@ TEMPLATE = """
             color: #00ffa3;
             font-family: monospace;
         }
-
-        /* Market Strategy Panel */
         .strategy-panel {
             background: #161b22;
             border: 1px solid #30363d;
@@ -180,8 +183,6 @@ TEMPLATE = """
         .stat-box.bearish { border-left-color: #f85149; }
         .stat-title { font-size: 0.75rem; color: #8b949e; }
         .stat-val { font-size: 1.1rem; font-weight: bold; margin-top: 4px; }
-
-        /* Marquee Ticker (< Rs 500) */
         .marquee-container {
             background-color: #161b22;
             overflow: hidden;
@@ -193,7 +194,7 @@ TEMPLATE = """
         }
         .marquee-content {
             display: inline-block;
-            animation: marquee 35s linear infinite;
+            animation: marquee 40s linear infinite;
         }
         .marquee-item {
             display: inline-block;
@@ -207,11 +208,9 @@ TEMPLATE = """
         }
         .positive { color: #2ea043; }
         .negative { color: #f85149; }
-        
-        /* Grid Layout */
         .grid-container {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
             gap: 20px;
         }
         .card {
@@ -232,14 +231,14 @@ TEMPLATE = """
         .card-header h3 {
             margin: 0;
             color: #58a6ff;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
         }
         .score-badge {
             background: #238636;
             color: white;
             padding: 4px 8px;
             border-radius: 12px;
-            font-size: 0.85rem;
+            font-size: 0.75rem;
             font-weight: bold;
         }
         .metric-row {
@@ -253,6 +252,14 @@ TEMPLATE = """
             color: #c9d1d9;
             font-weight: 500;
         }
+        .chart-box {
+            position: relative;
+            height: 130px;
+            margin-top: 15px;
+            background: #0d1117;
+            border-radius: 6px;
+            padding: 5px;
+        }
         .analysis-box {
             background: #0d1117;
             padding: 10px;
@@ -261,7 +268,6 @@ TEMPLATE = """
             font-size: 0.8rem;
             border-left: 3px solid #58a6ff;
         }
-        /* Login Card */
         .login-card {
             max-width: 400px;
             margin: 80px auto;
@@ -291,7 +297,7 @@ TEMPLATE = """
         }
         .error { color: #f85149; font-size: 0.85rem; }
     </style>
-    <!-- Auto-refresh page every 60 seconds (1 minute) for live data updates -->
+    <!-- Automatic Refresh every 60 seconds (1 minute) -->
     <script>
         setTimeout(function(){
            window.location.reload(1);
@@ -300,7 +306,6 @@ TEMPLATE = """
 </head>
 <body>
 
-    <!-- Top Navigation Bar -->
     <div class="top-navbar">
         <div class="nav-left">
             <a href="javascript:history.back()">⬅ Back</a>
@@ -309,7 +314,6 @@ TEMPLATE = """
         <div class="nav-right">
             {% if session.get('user') %}
                 <span class="user-tag">👤 Md Azad</span>
-                <span style="font-size: 0.8rem; color: #8b949e;">({{ session.user }})</span>
                 <div class="menu-dropdown">
                     Menu: <a href="{{ url_for('dashboard') }}" style="border:none; background:none; padding:0; color:#58a6ff;">Dashboard</a> | 
                     <a href="{{ url_for('logout') }}" style="border:none; background:none; padding:0; color:#f85149;">Logout</a>
@@ -321,10 +325,9 @@ TEMPLATE = """
         </div>
     </div>
 
-    <!-- Live News Ticker -->
     <div class="news-ticker">
         <div class="news-content">
-            🔴 <b>Live News Bulletin:</b> NSE and BSE expanded scan active. Nifty holds support levels as institutional capital flows remain strong across midcap and high-momentum stocks. Auto and FMCG sectors lead positive market breadth.
+            🔴 <b>Live News Bulletin:</b> Multi-asset scanner tracking TCS, IRFC, Lemontree, Wipro, and sector indices like Pharma & Energy. Data refreshed seamlessly every 1 minute.
         </div>
     </div>
 
@@ -334,37 +337,36 @@ TEMPLATE = """
                 <h2>🔐 Trader Login - Md Azad</h2>
                 {% if error %}<div class="error">{{ error }}</div>{% endif %}
                 <form method="POST">
-                    <label>Username (try: admin)</label>
+                    <label>Username</label>
                     <input type="text" name="username" required>
-                    <label>Password (try: admin123)</label>
+                    <label>Password</label>
                     <input type="password" name="password" required>
                     <button type="submit">Login</button>
                 </form>
             </div>
         {% else %}
-            <h1>📊 Market Strategy & Live Statistics Dashboard</h1>
+            <h1>📊 NSE Live Strategy & Charting Dashboard</h1>
             
-            <!-- Market Strategy Panel -->
             <div class="strategy-panel">
                 <div class="stat-box">
-                    <div class="stat-title">MARKET SENTIMENT</div>
-                    <div class="stat-val" style="color: #2ea043;">Bullish Momentum 🚀</div>
+                    <div class="stat-title">TRADER ACCOUNT</div>
+                    <div class="stat-val" style="color: #00ffa3;">Md Azad Active 🟢</div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-title">SCAN POOL STATUS</div>
-                    <div class="stat-val">50+ NSE Stocks Scanned</div>
+                    <div class="stat-title">TOTAL ASSETS TRACKED</div>
+                    <div class="stat-val">Stocks & Indices Scanned</div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-title">RECOMMENDED STRATEGY</div>
-                    <div class="stat-val" style="color: #58a6ff;">Swing Trading (< ₹500)</div>
+                    <div class="stat-title">CHARTING ENGINE</div>
+                    <div class="stat-val" style="color: #58a6ff;">Chart.js Enabled 📈</div>
                 </div>
                 <div class="stat-box bearish">
-                    <div class="stat-title">AUTO REFRESH INTERVAL</div>
+                    <div class="stat-title">REFRESH FREQUENCY</div>
                     <div class="stat-val" style="color: #f85149;">Every 1 Minute ⏱️</div>
                 </div>
             </div>
 
-            <h2>⚡ Live Moving Ticker (< ₹500 Stocks Only)</h2>
+            <h2>⚡ Live Moving Ticker</h2>
             <div class="marquee-container">
                 <div class="marquee-content">
                     {% for stock in marquee_stocks %}
@@ -386,9 +388,9 @@ TEMPLATE = """
                 </div>
             </div>
 
-            <h2>Top 10 AI Recommendations (RSI, MACD, Technical & Fundamental Analysis)</h2>
+            <h2>Full Market List with 1-Month Trend Charts</h2>
             <div class="grid-container">
-                {% for stock in top_10 %}
+                {% for stock in all_stocks %}
                 <div class="card">
                     <div class="card-header">
                         <h3>{{ stock.symbol }}</h3>
@@ -398,14 +400,49 @@ TEMPLATE = """
                     <div class="metric-row"><span>Change:</span> <span class="metric-value {{ 'positive' if stock.change >= 0 else 'negative' }}">{{ stock.change }}%</span></div>
                     <div class="metric-row"><span>RSI (14):</span> <span class="metric-value">{{ stock.rsi }}</span></div>
                     <div class="metric-row"><span>MACD Signal:</span> <span class="metric-value">{{ stock.macd_status }}</span></div>
-                    <div class="metric-row"><span>P/E Ratio:</span> <span class="metric-value">{{ stock.pe }}</span></div>
-                    <div class="metric-row"><span>Est. Target Return:</span> <span class="metric-value" style="color: #3fb950;">{{ stock.return }}</span></div>
                     
+                    <!-- Embedded Chart.js Canvas Container -->
+                    <div class="chart-box">
+                        <canvas id="chart_{{ loop.index }}"></canvas>
+                    </div>
+
                     <div class="analysis-box">
                         <div>📈 <b>Technical:</b> {{ stock.technical }}</div>
-                        <div>📊 <b>Fundamental:</b> {{ stock.fundamental }}</div>
+                        <div>📊 <b>Valuation:</b> P/E {{ stock.pe }} | {{ stock.fundamental }}</div>
                     </div>
                 </div>
+
+                <!-- Inline JavaScript to render individual stock charts -->
+                <script>
+                    const ctx_{{ loop.index }} = document.getElementById('chart_{{ loop.index }}').getContext('2d');
+                    new Chart(ctx_{{ loop.index }}, {
+                        type: 'line',
+                        data: {
+                            labels: {{ stock.chart_dates | tojson }},
+                            datasets: [{
+                                data: {{ stock.chart_prices | tojson }},
+                                borderColor: '{{ "#2ea043" if stock.change >= 0 else "#f85149" }}',
+                                borderWidth: 2,
+                                pointRadius: 0,
+                                fill: true,
+                                backgroundColor: '{{ "rgba(46, 160, 67, 0.1)" if stock.change >= 0 else "rgba(248, 81, 73, 0.1)" }}',
+                                tension: 0.2
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { display: false },
+                                y: { 
+                                    grid: { color: '#21262d' },
+                                    ticks: { color: '#8b949e', font: { size: 10 } }
+                                }
+                            }
+                        }
+                    });
+                </script>
                 {% endfor %}
             </div>
         {% endif %}
@@ -433,8 +470,8 @@ def dashboard():
     if "user" not in session:
         return redirect(url_for("login"))
     
-    marquee_stocks, top_10_stocks = scan_stocks_parallel()
-    return render_template_string(TEMPLATE, page="dashboard", marquee_stocks=marquee_stocks, top_10=top_10_stocks)
+    marquee_stocks, all_stocks = scan_stocks_parallel()
+    return render_template_string(TEMPLATE, page="dashboard", marquee_stocks=marquee_stocks, all_stocks=all_stocks)
 
 @app.route("/logout")
 def logout():
