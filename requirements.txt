@@ -1,5 +1,30 @@
-Flask>=3.0.0
-gunicorn>=21.2.0
-yfinance
-pandas
-numpy
+# Web Framework & Core Server
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+pydantic>=2.6.0
+
+# Indian Broker SDKs
+dhanhq>=1.3.0
+kiteconnect>=5.0.0
+
+# Global / Foreign Stock APIs (Future Expansion)
+yfinance>=0.2.35
+alpha_vantage>=2.3.1
+
+# Strategy, Data Processing & Technical Indicators
+pandas>=2.2.0
+numpy>=1.26.0
+pandas-ta>=0.3.14b0
+
+# Async WebSockets & Real-time Feeds
+websockets>=12.0
+
+# AI Integration & Framework
+openai>=1.14.0
+google-genai>=0.1.0
+langchain>=0.1.10
+langchain-openai>=0.0.8
+
+# Security & CORS Setup
+python-dotenv>=1.0.1
+requests>=2.31.0
