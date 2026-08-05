@@ -175,8 +175,7 @@ def serve_dashboard():
     </body>
     </html>
     """
-
-@app.get("/", methods=["GET", "POST"])
+@app.get("/", response_class=HTMLResponse)
 def login():
     error = None
     if request.method == "POST":
