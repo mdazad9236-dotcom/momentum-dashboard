@@ -1,456 +1,188 @@
-from flask import Flask, render_template_string, request, redirect, url_for, session
-import yfinance as yf
-import pandas as pd
-from concurrent.futures import ThreadPoolExecutor
-import json
+import os
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from dhanhq import DhanContext, dhanhq  # Dhan SDK
 
-app = Flask(__name__)
-app.secret_key = "md_azad_momentum_dashboard_key"
+app = FastAPI()
 
-# Valid user credentials for Md Azad's portal
-USERS = {
-    "admin": "admin123",
-    "mdazad": "password01"
-}
+# Allow Frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Expanded scan pool containing your requested stocks, indices & heavyweights
-SCAN_POOL = [
-    # Requested Stocks & Indices
-    "TCS.NS", "IRFC.NS", "LEMONTREE.NS", "WIPRO.NS", 
-    # Sector Indices & Heavyweights
-    "^CNXPHARMA", "^CNXENERGY", "RELIANCE.NS", "HDFCBANK.NS", "ICICIBANK.NS", 
-    "INFY.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "AXISBANK.NS", 
-    "KOTAKBANK.NS", "LT.NS", "ASIANPAINT.NS", "MARUTI.NS", "TITAN.NS", 
-    "SUNPHARMA.NS", "BAJFINANCE.NS", "NTPC.NS", "POWERGRID.NS", "TATASTEEL.NS", 
-    "JSWSTEEL.NS", "TECHM.NS", "HCLTECH.NS", "INDUSINDBK.NS", "BPCL.NS", 
-    "IOC.NS", "COALINDIA.NS", "TATAMOTORS.NS", "ADANIENT.NS", "ADANIPORTS.NS", 
-    "DIVISLAB.NS", "CIPLA.NS", "DRREDDY.NS", "BRITANNIA.NS", "ZOMATO.NS", 
-    "SUZLON.NS", "IDFCFIRSTB.NS", "PNB.NS", "VEDL.NS", "TATAPOWER.NS"
-]
+# 1. Initialize Broker API (Dhan Example)
+DHAN_CLIENT_ID = os.getenv("DHAN_CLIENT_ID", "YOUR_CLIENT_ID")
+DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN", "YOUR_ACCESS_TOKEN")
+dhan_context = DhanContext(DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN)
+dhan = dhanhq(dhan_context)
 
-def fetch_single_stock(ticker):
+# 2. Stock Data Model & External Hyperlinks Map
+@app.get("/api/stock/{symbol}")
+def get_stock_details(symbol: str):
+    symbol_clean = symbol.upper()
+    return {
+        "symbol": symbol_clean,
+        "external_links": {
+            "screener": f"https://www.screener.in/company/{symbol_clean}/",
+            "tradingview": f"https://in.tradingview.com/symbols/NSE-{symbol_clean}/",
+            "chartink": f"https://chartink.com/stocks/{symbol_clean}.html"
+        }
+    }
+
+# 3. Strategy Trigger & Demat Order Execution
+class StrategySignal(BaseModel):
+    security_id: str  # e.g., '1333' for HDFC Bank
+    symbol: str
+    action: str      # BUY or SELL
+    quantity: int
+
+@app.post("/api/execute-strategy")
+def execute_strategy(signal: StrategySignal):
     try:
-        stock = yf.Ticker(ticker)
-        df = stock.history(period="1mo")
-        if df.empty or len(df) < 10:
-            return None
-            
-        current_price = float(df['Close'].iloc[-1])
-        prev_close = float(stock.info.get('previousClose', df['Close'].iloc[-2]))
-        change = ((current_price - prev_close) / prev_close) * 100
-        
-        # Extract chart history dates and close prices for Chart.js
-        chart_dates = [d.strftime('%d %b') for d in df.index]
-        chart_prices = [round(float(p), 2) for p in df['Close']]
+        # Places order directly in your Demat / Trading Account
+        order = dhan.place_order(
+            security_id=signal.security_id,
+            exchange_segment=dhan.NSE,
+            transaction_type=dhan.BUY if signal.action == "BUY" else dhan.SELL,
+            quantity=signal.quantity,
+            order_type=dhan.MARKET,
+            product_type=dhan.INTRA,
+            price=0
+        )
+        return {"status": "SUCCESS", "order_details": order}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-        # RSI calculation
-        delta = df['Close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        current_rsi = round(float(rsi.iloc[-1]), 1) if not rsi.empty else 50.0
-        
-        # MACD calculation
-        exp1 = df['Close'].ewm(span=12, adjust=False).mean()
-        exp2 = df['Close'].ewm(span=26, adjust=False).mean()
-        macd = exp1 - exp2
-        signal = macd.ewm(span=9, adjust=False).mean()
-        
-        score = 50
-        if 40 <= current_rsi <= 70: score += 20
-        if macd.iloc[-1] > signal.iloc[-1]: score += 20
-        if change > 0: score += 10
-        score = min(score, 98)
-        
-        pe_ratio = round(float(stock.info.get('trailingPE', 22.5) or 22.5), 2)
-        clean_name = ticker.replace(".NS", "").replace("^CNX", "Index: ")
-        
-        return {
-            "symbol": clean_name,
-            "price": round(current_price, 2),
-            "change": round(change, 2),
-            "rsi": current_rsi,
-            "macd_status": "Bullish Crossover" if macd.iloc[-1] > signal.iloc[-1] else "Neutral/Bearish",
-            "score": int(score),
-            "pe": pe_ratio,
-            "technical": "Strong Momentum" if score > 75 else "Consolidating Range",
-            "fundamental": "Undervalued Growth" if pe_ratio < 30 else "Fairly Valued",
-            "return": f"+{score // 4}% to +{(score // 4) + 8}% (6 Mo)",
-            "chart_dates": chart_dates,
-            "chart_prices": chart_prices
-        }
-    except Exception:
-        return None
+# 4. AI Chatbot API Endpoint
+class ChatQuery(BaseModel):
+    prompt: str
 
-def scan_stocks_parallel():
-    results = []
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_ticker = {executor.submit(fetch_single_stock, t): t for t in SCAN_POOL}
-        for future in future_to_ticker:
-            res = future.result()
-            if res:
-                results.append(res)
-                
-    results = sorted(results, key=lambda x: x['score'], reverse=True)
-    marquee_stocks = [s for s in results if s['price'] < 1000]
-    return marquee_stocks, results
+@app.post("/api/ai-chat")
+def ai_assistant(query: ChatQuery):
+    user_msg = query.prompt.lower()
+    
+    # Custom logic or connection to OpenAI / Gemini API
+    if "top performers" in user_msg:
+        reply = "Currently, TATA MOTORS (+0.49%) and HYUNDAI (+0.81%) are showing strong bullish momentum."
+    elif "strategy" in user_msg:
+        reply = "Your active EMA Crossover strategy triggered 1 BUY order today on COALINDIA."
+    else:
+        reply = f"I am your Market AI. Analyzing '{query.prompt}'..."
 
-TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NSE/BSE Momentum Dashboard - Md Azad</title>
-    <!-- Include Chart.js for interactive stock charts -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body {
-            background-color: #0b0e14;
-            color: #ffffff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-        }
-        .top-navbar {
-            background-color: #161b22;
-            padding: 10px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #30363d;
-            font-size: 0.9rem;
-        }
-        .nav-left, .nav-right {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        .nav-left a, .nav-right a, .menu-dropdown {
-            color: #c9d1d9;
-            text-decoration: none;
-            padding: 5px 10px;
-            background: #21262d;
-            border: 1px solid #30363d;
-            border-radius: 4px;
-            font-weight: 500;
-        }
-        .nav-left a:hover, .nav-right a:hover {
-            background: #30363d;
-            color: #58a6ff;
-        }
-        .user-tag {
-            color: #00ffa3;
-            font-weight: bold;
-        }
-        .news-ticker {
-            background-color: #1f242c;
-            color: #f0f6fc;
-            padding: 8px 20px;
-            font-size: 0.85rem;
-            border-bottom: 1px solid #30363d;
-            white-space: nowrap;
-            overflow: hidden;
-        }
-        .news-content {
-            display: inline-block;
-            animation: marquee 35s linear infinite;
-        }
-        .container {
-            padding: 20px;
-        }
-        h1, h2 {
-            color: #00ffa3;
-            font-family: monospace;
-        }
-        .strategy-panel {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            padding: 15px 20px;
-            margin-bottom: 25px;
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-        .stat-box {
-            background: #0d1117;
-            padding: 12px;
-            border-radius: 6px;
-            border-left: 4px solid #238636;
-        }
-        .stat-box.bearish { border-left-color: #f85149; }
-        .stat-title { font-size: 0.75rem; color: #8b949e; }
-        .stat-val { font-size: 1.1rem; font-weight: bold; margin-top: 4px; }
-        .marquee-container {
-            background-color: #161b22;
-            overflow: hidden;
-            white-space: nowrap;
-            padding: 12px 0;
-            border-radius: 6px;
-            border: 1px solid #30363d;
-            margin-bottom: 30px;
-        }
-        .marquee-content {
-            display: inline-block;
-            animation: marquee 40s linear infinite;
-        }
-        .marquee-item {
-            display: inline-block;
-            margin-right: 40px;
-            font-weight: 600;
-            font-size: 0.95rem;
-        }
-        @keyframes marquee {
-            0% { transform: translate3d(0, 0, 0); }
-            100% { transform: translate3d(-50%, 0, 0); }
-        }
-        .positive { color: #2ea043; }
-        .negative { color: #f85149; }
-        .grid-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-            gap: 20px;
-        }
-        .card {
-            background-color: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-        }
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #30363d;
-            padding-bottom: 10px;
-            margin-bottom: 12px;
-        }
-        .card-header h3 {
-            margin: 0;
-            color: #58a6ff;
-            font-size: 1.1rem;
-        }
-        .score-badge {
-            background: #238636;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: bold;
-        }
-        .metric-row {
-            font-size: 0.85rem;
-            color: #8b949e;
-            margin-bottom: 6px;
-            display: flex;
-            justify-content: space-between;
-        }
-        .metric-value {
-            color: #c9d1d9;
-            font-weight: 500;
-        }
-        .chart-box {
-            position: relative;
-            height: 130px;
-            margin-top: 15px;
-            background: #0d1117;
-            border-radius: 6px;
-            padding: 5px;
-        }
-        .analysis-box {
-            background: #0d1117;
-            padding: 10px;
-            border-radius: 6px;
-            margin-top: 12px;
-            font-size: 0.8rem;
-            border-left: 3px solid #58a6ff;
-        }
-        .login-card {
-            max-width: 400px;
-            margin: 80px auto;
-            background: #161b22;
-            padding: 30px;
-            border-radius: 8px;
-            border: 1px solid #30363d;
-        }
-        .login-card input {
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0 20px 0;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            color: white;
-            border-radius: 4px;
-        }
-        .login-card button {
-            width: 100%;
-            padding: 10px;
-            background: #238636;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .error { color: #f85149; font-size: 0.85rem; }
-    </style>
-    <!-- Automatic Refresh every 60 seconds (1 minute) -->
-    <script>
-        setTimeout(function(){
-           window.location.reload(1);
-        }, 60000);
-    </script>
-</head>
-<body>
+    return {"response": reply}
+    import React, { useState } from 'react';
 
-    <div class="top-navbar">
-        <div class="nav-left">
-            <a href="javascript:history.back()">⬅ Back</a>
-            <a href="{{ url_for('dashboard') }}">🏠 Home</a>
-        </div>
-        <div class="nav-right">
-            {% if session.get('user') %}
-                <span class="user-tag">👤 Md Azad</span>
-                <div class="menu-dropdown">
-                    Menu: <a href="{{ url_for('dashboard') }}" style="border:none; background:none; padding:0; color:#58a6ff;">Dashboard</a> | 
-                    <a href="{{ url_for('logout') }}" style="border:none; background:none; padding:0; color:#f85149;">Logout</a>
+const stocks = [
+  { symbol: "TATAMOTORS", name: "Tata Motors Limited", price: "721.50", change: "+0.49%", status: "positive" },
+  { symbol: "HYUNDAI", name: "Hyundai Motor India", price: "2,201.50", change: "+0.81%", status: "positive" },
+  { symbol: "COALINDIA", name: "Coal India Ltd", price: "412.65", change: "-1.10%", status: "negative" }
+];
+
+export default function StockDashboard() {
+  const [chatOpen, setChatOpen] = useState(false);
+  const [messages, setMessages] = useState([{ sender: 'ai', text: 'Hi! Ask me about stock screeners, signals, or strategy status.' }]);
+  const [input, setInput] = useState('');
+
+  const handleSendMessage = async () => {
+    if (!input.trim()) return;
+    const userMessage = { sender: 'user', text: input };
+    setMessages(prev => [...prev, userMessage]);
+    
+    // Call FastAPI backend AI endpoint
+    const res = await fetch('http://localhost:8000/api/ai-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: input })
+    });
+    const data = await res.json();
+    
+    setMessages(prev => [...prev, { sender: 'ai', text: data.response }]);
+    setInput('');
+  };
+
+  return (
+    <div className="bg-neutral-900 text-white min-h-screen p-6 font-sans">
+      <h1 className="text-xl font-bold mb-6 text-gray-200">Market Screener & Strategy Dashboard</h1>
+
+      {/* Stock Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        {stocks.map((stock) => (
+          <div key={stock.symbol} className="bg-neutral-800 p-4 rounded-lg border border-neutral-700">
+            <div className="flex justify-between items-center mb-2">
+              <span className="font-bold text-lg">{stock.symbol}</span>
+              <span className={`text-sm px-2 py-0.5 rounded ${stock.status === 'positive' ? 'bg-emerald-900 text-emerald-300' : 'bg-rose-900 text-rose-300'}`}>
+                {stock.change}
+              </span>
+            </div>
+            <p className="text-gray-400 text-xs mb-3">{stock.name}</p>
+            <p className="text-xl font-bold mb-4">₹{stock.price}</p>
+
+            {/* Hyperlinks for Manual Stock Checks */}
+            <div className="flex gap-2 text-xs border-t border-neutral-700 pt-3">
+              <a 
+                href={`https://in.tradingview.com/symbols/NSE-${stock.symbol}/`} 
+                target="_blank" 
+                rel="noreferrer" 
+                className="text-blue-400 hover:underline"
+              >
+                TradingView
+              </a>
+              <span className="text-gray-600">•</span>
+              <a 
+                href={`https://www.screener.in/company/${stock.symbol}/`} 
+                target="_blank" 
+                rel="noreferrer" 
+                className="text-blue-400 hover:underline"
+              >
+                Screener.in
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* AI Assistant Floating Widget */}
+      <div className="fixed bottom-6 right-6">
+        {!chatOpen ? (
+          <button 
+            onClick={() => setChatOpen(true)}
+            className="bg-blue-600 hover:bg-blue-500 text-white p-4 rounded-full shadow-lg font-bold"
+          >
+            💬 AI Assistant
+          </button>
+        ) : (
+          <div className="bg-neutral-800 border border-neutral-700 rounded-lg w-80 h-96 flex flex-col shadow-2xl">
+            <div className="bg-neutral-700 p-3 flex justify-between items-center rounded-t-lg">
+              <span className="font-bold text-sm">Trading Assistant AI</span>
+              <button onClick={() => setChatOpen(false)} className="text-gray-400 hover:text-white">✕</button>
+            </div>
+            <div className="flex-1 p-3 overflow-y-auto space-y-2 text-sm">
+              {messages.map((m, idx) => (
+                <div key={idx} className={`p-2 rounded ${m.sender === 'user' ? 'bg-blue-600 self-end ml-8' : 'bg-neutral-700 self-start mr-8'}`}>
+                  {m.text}
                 </div>
-            {% else %}
-                <span class="user-tag">👤 Md Azad (Guest)</span>
-                <a href="{{ url_for('login') }}">Login</a>
-            {% endif %}
-        </div>
+              ))}
+            </div>
+            <div className="p-2 border-t border-neutral-700 flex gap-2">
+              <input 
+                value={input} 
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask AI..."
+                className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-sm flex-1 text-white focus:outline-none"
+              />
+              <button onClick={handleSendMessage} className="bg-blue-600 px-3 py-1 rounded text-xs">Send</button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
-
-    <div class="news-ticker">
-        <div class="news-content">
-            🔴 <b>Live News Bulletin:</b> Multi-asset scanner tracking TCS, IRFC, Lemontree, Wipro, and sector indices like Pharma & Energy. Data refreshed seamlessly every 1 minute.
-        </div>
-    </div>
-
-    <div class="container">
-        {% if page == 'login' %}
-            <div class="login-card">
-                <h2>🔐 Trader Login - Md Azad</h2>
-                {% if error %}<div class="error">{{ error }}</div>{% endif %}
-                <form method="POST">
-                    <label>Username</label>
-                    <input type="text" name="username" required>
-                    <label>Password</label>
-                    <input type="password" name="password" required>
-                    <button type="submit">Login</button>
-                </form>
-            </div>
-        {% else %}
-            <h1>📊 NSE Live Strategy & Charting Dashboard</h1>
-            
-            <div class="strategy-panel">
-                <div class="stat-box">
-                    <div class="stat-title">TRADER ACCOUNT</div>
-                    <div class="stat-val" style="color: #00ffa3;">Md Azad Active 🟢</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-title">TOTAL ASSETS TRACKED</div>
-                    <div class="stat-val">Stocks & Indices Scanned</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-title">CHARTING ENGINE</div>
-                    <div class="stat-val" style="color: #58a6ff;">Chart.js Enabled 📈</div>
-                </div>
-                <div class="stat-box bearish">
-                    <div class="stat-title">REFRESH FREQUENCY</div>
-                    <div class="stat-val" style="color: #f85149;">Every 1 Minute ⏱️</div>
-                </div>
-            </div>
-
-            <h2>⚡ Live Moving Ticker</h2>
-            <div class="marquee-container">
-                <div class="marquee-content">
-                    {% for stock in marquee_stocks %}
-                        <span class="marquee-item">
-                            📍 <b>{{ stock.symbol }}</b>: ₹{{ stock.price }} 
-                            <span class="{{ 'positive' if stock.change >= 0 else 'negative' }}">
-                                {{ '+' if stock.change >= 0 else '' }}{{ stock.change }}%
-                            </span>
-                        </span>
-                    {% endfor %}
-                    {% for stock in marquee_stocks %}
-                        <span class="marquee-item">
-                            📍 <b>{{ stock.symbol }}</b>: ₹{{ stock.price }} 
-                            <span class="{{ 'positive' if stock.change >= 0 else 'negative' }}">
-                                {{ '+' if stock.change >= 0 else '' }}{{ stock.change }}%
-                            </span>
-                        </span>
-                    {% endfor %}
-                </div>
-            </div>
-
-            <h2>Full Market List with 1-Month Trend Charts</h2>
-            <div class="grid-container">
-                {% for stock in all_stocks %}
-                <div class="card">
-                    <div class="card-header">
-                        <h3>{{ stock.symbol }}</h3>
-                        <div class="score-badge">Score: {{ stock.score }}/100</div>
-                    </div>
-                    <div class="metric-row"><span>CMP Price:</span> <span class="metric-value">₹{{ stock.price }}</span></div>
-                    <div class="metric-row"><span>Change:</span> <span class="metric-value {{ 'positive' if stock.change >= 0 else 'negative' }}">{{ stock.change }}%</span></div>
-                    <div class="metric-row"><span>RSI (14):</span> <span class="metric-value">{{ stock.rsi }}</span></div>
-                    <div class="metric-row"><span>MACD Signal:</span> <span class="metric-value">{{ stock.macd_status }}</span></div>
-                    
-                    <!-- Embedded Chart.js Canvas Container -->
-                    <div class="chart-box">
-                        <canvas id="chart_{{ loop.index }}"></canvas>
-                    </div>
-
-                    <div class="analysis-box">
-                        <div>📈 <b>Technical:</b> {{ stock.technical }}</div>
-                        <div>📊 <b>Valuation:</b> P/E {{ stock.pe }} | {{ stock.fundamental }}</div>
-                    </div>
-                </div>
-
-                <!-- Inline JavaScript to render individual stock charts -->
-                <script>
-                    const ctx_{{ loop.index }} = document.getElementById('chart_{{ loop.index }}').getContext('2d');
-                    new Chart(ctx_{{ loop.index }}, {
-                        type: 'line',
-                        data: {
-                            labels: {{ stock.chart_dates | tojson }},
-                            datasets: [{
-                                data: {{ stock.chart_prices | tojson }},
-                                borderColor: '{{ "#2ea043" if stock.change >= 0 else "#f85149" }}',
-                                borderWidth: 2,
-                                pointRadius: 0,
-                                fill: true,
-                                backgroundColor: '{{ "rgba(46, 160, 67, 0.1)" if stock.change >= 0 else "rgba(248, 81, 73, 0.1)" }}',
-                                tension: 0.2
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: { legend: { display: false } },
-                            scales: {
-                                x: { display: false },
-                                y: { 
-                                    grid: { color: '#21262d' },
-                                    ticks: { color: '#8b949e', font: { size: 10 } }
-                                }
-                            }
-                        }
-                    });
-                </script>
-                {% endfor %}
-            </div>
-        {% endif %}
-    </div>
-
-</body>
-</html>
-"""
+  );
+}
 
 @app.route("/", methods=["GET", "POST"])
 def login():
