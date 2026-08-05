@@ -176,7 +176,7 @@ def serve_dashboard():
     </html>
     """
 
-@app.route("/", methods=["GET", "POST"])
+@app.get("/", methods=["GET", "POST"])
 def login():
     error = None
     if request.method == "POST":
@@ -189,7 +189,7 @@ def login():
             error = "Invalid credentials! Try admin / admin123"
     return render_template_string(TEMPLATE, page="login", error=error)
 
-@app.route("/dashboard")
+@app.get("/dashboard")
 def dashboard():
     if "user" not in session:
         return redirect(url_for("login"))
@@ -197,7 +197,7 @@ def dashboard():
     marquee_stocks, all_stocks = scan_stocks_parallel()
     return render_template_string(TEMPLATE, page="dashboard", marquee_stocks=marquee_stocks, all_stocks=all_stocks)
 
-@app.route("/logout")
+@app.get("/logout")
 def logout():
     session.pop("user", None)
     return redirect(url_for("login"))
