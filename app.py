@@ -375,3 +375,22 @@ async def ai_chat(request: Request):
         reply = "⚡ Enter a stock symbol (e.g. SUZLON, IDEA) to view target predictions."
 
     return JSONResponse({"reply": reply})
+    <!-- TradingView Widget BEGIN -->
+<div class="tradingview-widget-container">
+  <div id="tradingview_chart"></div>
+  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+  <script type="text/javascript">
+    new TradingView.widget({
+      "width": "100%",
+      "height": 400,
+      "symbol": "NSE:SUZLON",
+      "interval": "D",
+      "timezone": "Asia/Kolkata",
+      "theme": "dark",
+      "style": "1",
+      "locale": "en",
+      "container_id": "tradingview_chart"
+    });
+  </script>
+</div>
+<!-- TradingView Widget END -->
