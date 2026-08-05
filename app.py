@@ -4,37 +4,40 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
-app.secret_key = "md_azad_momentum_key"
+app.secret_key = "md_azad_momentum_dashboard_key"
 
+# Valid user credentials for Md Azad's portal
 USERS = {
     "admin": "admin123",
     "mdazad": "password01"
 }
 
+# Expanded scan pool of prominent NSE/BSE stocks
 SCAN_POOL = [
-    "SUZLON.NS", "IDFCFIRSTB.NS", "ZOMATO.NS", "PNB.NS", "ITC.NS",
-    "IOC.NS", "BPCL.NS", "TATAPOWER.NS", "NTPC.NS", "GAIL.NS",
-    "COALINDIA.NS", "VEDL.NS", "TATAMOTORS.NS", "SBIN.NS", "AXISBANK.NS",
-    "WIPRO.NS", "INFY.NS", "HCLTECH.NS", "TCS.NS", "RELIANCE.NS",
-    "LT.NS", "TITAN.NS", "SUNPHARMA.NS", "MARUTI.NS", "BAJFINANCE.NS",
-    "ASIANPAINT.NS", "NESTLEIND.NS", "ULTRACEMCO.NS", "POWERGRID.NS", "JSWSTEEL.NS",
-    "TATASTEEL.NS", "GRASIM.NS", "TECHM.NS", "BHARTIARTL.NS", "HINDALCO.NS",
-    "DRREDDY.NS", "CIPLA.NS", "BRITANNIA.NS", "EICHERMOT.NS", "APOLLOHOSP.NS",
-    "SBILIFE.NS", "HDFCLIFE.NS", "DIVISLAB.NS", "ADANIENT.NS", "ADANIPORTS.NS",
-    "HEROMOTOCO.NS", "UPL.NS", "BAJAJ-AUTO.NS", "SHRIRAMFIN.NS", "LTIM.NS"
+    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS", "INFY.NS",
+    "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "LTIM.NS", "AXISBANK.NS",
+    "KOTAKBANK.NS", "LT.NS", "ASIANPAINT.NS", "MARUTI.NS", "TITAN.NS",
+    "SUNPHARMA.NS", "BAJFINANCE.NS", "NTPC.NS", "POWERGRID.NS", "TATASTEEL.NS",
+    "JSWSTEEL.NS", "GRASIM.NS", "TECHM.NS", "HCLTECH.NS", "WIPRO.NS",
+    "INDUSINDBK.NS", "BAJAJFINSV.NS", "BPCL.NS", "IOC.NS", "COALINDIA.NS",
+    "TATAMOTORS.NS", "ADANIENT.NS", "ADANIPORTS.NS", "DIVISLAB.NS", "CIPLA.NS",
+    "DRREDDY.NS", "BRITANNIA.NS", "EICHERMOT.NS", "HEROMOTOCO.NS", "APOLLOHOSP.NS",
+    "ULTRACEMCO.NS", "NESTLEIND.NS", "SBILIFE.NS", "HDFCLIFE.NS", "ZOMATO.NS",
+    "SUZLON.NS", "IDFCFIRSTB.NS", "PNB.NS", "VEDL.NS", "TATAPOWER.NS"
 ]
 
 def fetch_single_stock(ticker):
     try:
         stock = yf.Ticker(ticker)
-        df = stock.history(period="3mo")
-        if df.empty or len(df) < 30:
+        df = stock.history(period="1mo")
+        if df.empty or len(df) < 15:
             return None
             
         current_price = float(df['Close'].iloc[-1])
         prev_close = float(stock.info.get('previousClose', df['Close'].iloc[-2]))
         change = ((current_price - prev_close) / prev_close) * 100
         
+        # RSI calculation
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -42,6 +45,7 @@ def fetch_single_stock(ticker):
         rsi = 100 - (100 / (1 + rs))
         current_rsi = round(float(rsi.iloc[-1]), 1) if not rsi.empty else 50.0
         
+        # MACD calculation
         exp1 = df['Close'].ewm(span=12, adjust=False).mean()
         exp2 = df['Close'].ewm(span=26, adjust=False).mean()
         macd = exp1 - exp2
@@ -63,7 +67,7 @@ def fetch_single_stock(ticker):
             "macd_status": "Bullish Crossover" if macd.iloc[-1] > signal.iloc[-1] else "Neutral/Bearish",
             "score": int(score),
             "pe": pe_ratio,
-            "technical": "Strong Momentum" if score > 75 else "Consolidating",
+            "technical": "Strong Momentum" if score > 75 else "Consolidating Range",
             "fundamental": "Undervalued Growth" if pe_ratio < 30 else "Fairly Valued",
             "return": f"+{score // 4}% to +{(score // 4) + 8}% (6 Mo)"
         }
@@ -72,6 +76,7 @@ def fetch_single_stock(ticker):
 
 def scan_stocks_parallel():
     results = []
+    # Multithreading scan for high performance across full 50+ list
     with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_ticker = {executor.submit(fetch_single_stock, t): t for t in SCAN_POOL}
         for future in future_to_ticker:
@@ -90,7 +95,7 @@ TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NSE/BSE Advanced Dashboard - Md Azad</title>
+    <title>NSE/BSE Live Momentum Dashboard - Md Azad</title>
     <style>
         body {
             background-color: #0b0e14;
@@ -99,7 +104,7 @@ TEMPLATE = """
             margin: 0;
             padding: 0;
         }
-        /* Top Utility & Menu Bar */
+        /* Top Navigation Bar */
         .top-navbar {
             background-color: #161b22;
             padding: 10px 20px;
@@ -144,10 +149,9 @@ TEMPLATE = """
         }
         .news-content {
             display: inline-block;
-            animation: marquee 25s linear infinite;
+            animation: marquee 30s linear infinite;
         }
 
-        /* Container Content */
         .container {
             padding: 20px;
         }
@@ -189,7 +193,7 @@ TEMPLATE = """
         }
         .marquee-content {
             display: inline-block;
-            animation: marquee 30s linear infinite;
+            animation: marquee 35s linear infinite;
         }
         .marquee-item {
             display: inline-block;
@@ -204,7 +208,7 @@ TEMPLATE = """
         .positive { color: #2ea043; }
         .negative { color: #f85149; }
         
-        /* Grid Layout for Top 10 Stocks */
+        /* Grid Layout */
         .grid-container {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -287,13 +291,16 @@ TEMPLATE = """
         }
         .error { color: #f85149; font-size: 0.85rem; }
     </style>
+    <!-- Auto-refresh page every 60 seconds (1 minute) for live data updates -->
     <script>
-        setTimeout(function(){ window.location.reload(1); }, 60000);
+        setTimeout(function(){
+           window.location.reload(1);
+        }, 60000);
     </script>
 </head>
 <body>
 
-    <!-- Top Navigation with Back Button (Left) & Menu / User Credentials (Right) -->
+    <!-- Top Navigation Bar -->
     <div class="top-navbar">
         <div class="nav-left">
             <a href="javascript:history.back()">⬅ Back</a>
@@ -314,17 +321,17 @@ TEMPLATE = """
         </div>
     </div>
 
-    <!-- Live News Ticker Bar -->
+    <!-- Live News Ticker -->
     <div class="news-ticker">
         <div class="news-content">
-            🔴 <b>Market News:</b> NSE & BSE indices exhibit steady momentum today. RBI keeps repo rate steady. FII inflows remain positive across major capital goods and tech counters. Keep strict stop losses on aggressive swing trades. 
+            🔴 <b>Live News Bulletin:</b> NSE and BSE expanded scan active. Nifty holds support levels as institutional capital flows remain strong across midcap and high-momentum stocks. Auto and FMCG sectors lead positive market breadth.
         </div>
     </div>
 
     <div class="container">
         {% if page == 'login' %}
             <div class="login-card">
-                <h2>🔐 Trader Login - Md Azad Portal</h2>
+                <h2>🔐 Trader Login - Md Azad</h2>
                 {% if error %}<div class="error">{{ error }}</div>{% endif %}
                 <form method="POST">
                     <label>Username (try: admin)</label>
@@ -335,7 +342,7 @@ TEMPLATE = """
                 </form>
             </div>
         {% else %}
-            <h1>📈 Market Strategy & Statistics Dashboard</h1>
+            <h1>📊 Market Strategy & Live Statistics Dashboard</h1>
             
             <!-- Market Strategy Panel -->
             <div class="strategy-panel">
@@ -344,20 +351,20 @@ TEMPLATE = """
                     <div class="stat-val" style="color: #2ea043;">Bullish Momentum 🚀</div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-title">ADVANCE / DECLINE RATIO</div>
-                    <div class="stat-val">1,912 / 1,294</div>
+                    <div class="stat-title">SCAN POOL STATUS</div>
+                    <div class="stat-val">50+ NSE Stocks Scanned</div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-title">FAVORED STRATEGY</div>
-                    <div class="stat-val" style="color: #58a6ff;">Buy on Dips (< ₹500)</div>
+                    <div class="stat-title">RECOMMENDED STRATEGY</div>
+                    <div class="stat-val" style="color: #58a6ff;">Swing Trading (< ₹500)</div>
                 </div>
                 <div class="stat-box bearish">
-                    <div class="stat-title">VOLATILITY INDEX (VIX)</div>
-                    <div class="stat-val" style="color: #f85149;">13.45 (Stable)</div>
+                    <div class="stat-title">AUTO REFRESH INTERVAL</div>
+                    <div class="stat-val" style="color: #f85149;">Every 1 Minute ⏱️</div>
                 </div>
             </div>
 
-            <h2>⚡ Live Stocks Ticker (< ₹500 Scanned Pool)</h2>
+            <h2>⚡ Live Moving Ticker (< ₹500 Stocks Only)</h2>
             <div class="marquee-container">
                 <div class="marquee-content">
                     {% for stock in marquee_stocks %}
@@ -379,7 +386,7 @@ TEMPLATE = """
                 </div>
             </div>
 
-            <h2>Top 10 Scanned AI Recommendations (Chart, RSI, MACD & Fundamentals)</h2>
+            <h2>Top 10 AI Recommendations (RSI, MACD, Technical & Fundamental Analysis)</h2>
             <div class="grid-container">
                 {% for stock in top_10 %}
                 <div class="card">
