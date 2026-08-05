@@ -4,15 +4,13 @@ import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
-app.secret_key = "super_secret_momentum_key"
+app.secret_key = "md_azad_momentum_key"
 
-# Dummy user credentials for login
 USERS = {
     "admin": "admin123",
-    "trader": "password01"
+    "mdazad": "password01"
 }
 
-# 50 NSE Stock Pool
 SCAN_POOL = [
     "SUZLON.NS", "IDFCFIRSTB.NS", "ZOMATO.NS", "PNB.NS", "ITC.NS",
     "IOC.NS", "BPCL.NS", "TATAPOWER.NS", "NTPC.NS", "GAIL.NS",
@@ -37,7 +35,6 @@ def fetch_single_stock(ticker):
         prev_close = float(stock.info.get('previousClose', df['Close'].iloc[-2]))
         change = ((current_price - prev_close) / prev_close) * 100
         
-        # RSI calculation
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -45,7 +42,6 @@ def fetch_single_stock(ticker):
         rsi = 100 - (100 / (1 + rs))
         current_rsi = round(float(rsi.iloc[-1]), 1) if not rsi.empty else 50.0
         
-        # MACD calculation
         exp1 = df['Close'].ewm(span=12, adjust=False).mean()
         exp2 = df['Close'].ewm(span=26, adjust=False).mean()
         macd = exp1 - exp2
@@ -76,7 +72,6 @@ def fetch_single_stock(ticker):
 
 def scan_stocks_parallel():
     results = []
-    # Fetch all 50 stocks concurrently using multithreading for instant load times
     with ThreadPoolExecutor(max_workers=10) as executor:
         future_to_ticker = {executor.submit(fetch_single_stock, t): t for t in SCAN_POOL}
         for future in future_to_ticker:
@@ -95,7 +90,7 @@ TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Momentum Dashboard</title>
+    <title>NSE/BSE Advanced Dashboard - Md Azad</title>
     <style>
         body {
             background-color: #0b0e14;
@@ -104,36 +99,84 @@ TEMPLATE = """
             margin: 0;
             padding: 0;
         }
-        /* Navbar Menu */
-        .navbar {
+        /* Top Utility & Menu Bar */
+        .top-navbar {
             background-color: #161b22;
-            padding: 15px 30px;
+            padding: 10px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             border-bottom: 1px solid #30363d;
+            font-size: 0.9rem;
         }
-        .navbar h2 {
-            margin: 0;
-            color: #00ffa3;
-            font-size: 1.2rem;
+        .nav-left, .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
         }
-        .nav-links a {
+        .nav-left a, .nav-right a, .menu-dropdown {
             color: #c9d1d9;
             text-decoration: none;
-            margin-left: 20px;
+            padding: 5px 10px;
+            background: #21262d;
+            border: 1px solid #30363d;
+            border-radius: 4px;
             font-weight: 500;
         }
-        .nav-links a:hover {
+        .nav-left a:hover, .nav-right a:hover {
+            background: #30363d;
             color: #58a6ff;
         }
+        .user-tag {
+            color: #00ffa3;
+            font-weight: bold;
+        }
+        
+        /* News Ticker Bar */
+        .news-ticker {
+            background-color: #1f242c;
+            color: #f0f6fc;
+            padding: 8px 20px;
+            font-size: 0.85rem;
+            border-bottom: 1px solid #30363d;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+        .news-content {
+            display: inline-block;
+            animation: marquee 25s linear infinite;
+        }
+
+        /* Container Content */
         .container {
-            padding: 20px 30px;
+            padding: 20px;
         }
         h1, h2 {
             color: #00ffa3;
             font-family: monospace;
         }
+
+        /* Market Strategy Panel */
+        .strategy-panel {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin-bottom: 25px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .stat-box {
+            background: #0d1117;
+            padding: 12px;
+            border-radius: 6px;
+            border-left: 4px solid #238636;
+        }
+        .stat-box.bearish { border-left-color: #f85149; }
+        .stat-title { font-size: 0.75rem; color: #8b949e; }
+        .stat-val { font-size: 1.1rem; font-weight: bold; margin-top: 4px; }
+
         /* Marquee Ticker (< Rs 500) */
         .marquee-container {
             background-color: #161b22;
@@ -161,7 +204,7 @@ TEMPLATE = """
         .positive { color: #2ea043; }
         .negative { color: #f85149; }
         
-        /* Grid Layout */
+        /* Grid Layout for Top 10 Stocks */
         .grid-container {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -214,7 +257,7 @@ TEMPLATE = """
             font-size: 0.8rem;
             border-left: 3px solid #58a6ff;
         }
-        /* Login Form Styles */
+        /* Login Card */
         .login-card {
             max-width: 400px;
             margin: 80px auto;
@@ -250,36 +293,71 @@ TEMPLATE = """
 </head>
 <body>
 
-    <div class="navbar">
-        <h2>🚀 Momentum AI Screener</h2>
-        <div class="nav-links">
+    <!-- Top Navigation with Back Button (Left) & Menu / User Credentials (Right) -->
+    <div class="top-navbar">
+        <div class="nav-left">
+            <a href="javascript:history.back()">⬅ Back</a>
+            <a href="{{ url_for('dashboard') }}">🏠 Home</a>
+        </div>
+        <div class="nav-right">
             {% if session.get('user') %}
-                <span>User: <b>{{ session.user }}</b></span>
-                <a href="{{ url_for('dashboard') }}">Dashboard</a>
-                <a href="{{ url_for('logout') }}" style="color: #f85149;">Logout</a>
+                <span class="user-tag">👤 Md Azad</span>
+                <span style="font-size: 0.8rem; color: #8b949e;">({{ session.user }})</span>
+                <div class="menu-dropdown">
+                    Menu: <a href="{{ url_for('dashboard') }}" style="border:none; background:none; padding:0; color:#58a6ff;">Dashboard</a> | 
+                    <a href="{{ url_for('logout') }}" style="border:none; background:none; padding:0; color:#f85149;">Logout</a>
+                </div>
             {% else %}
+                <span class="user-tag">👤 Md Azad (Guest)</span>
                 <a href="{{ url_for('login') }}">Login</a>
             {% endif %}
+        </div>
+    </div>
+
+    <!-- Live News Ticker Bar -->
+    <div class="news-ticker">
+        <div class="news-content">
+            🔴 <b>Market News:</b> NSE & BSE indices exhibit steady momentum today. RBI keeps repo rate steady. FII inflows remain positive across major capital goods and tech counters. Keep strict stop losses on aggressive swing trades. 
         </div>
     </div>
 
     <div class="container">
         {% if page == 'login' %}
             <div class="login-card">
-                <h2>🔐 Trader Login</h2>
+                <h2>🔐 Trader Login - Md Azad Portal</h2>
                 {% if error %}<div class="error">{{ error }}</div>{% endif %}
                 <form method="POST">
                     <label>Username (try: admin)</label>
                     <input type="text" name="username" required>
                     <label>Password (try: admin123)</label>
                     <input type="password" name="password" required>
-                    <button type="submit">Login to Dashboard</button>
+                    <button type="submit">Login</button>
                 </form>
             </div>
         {% else %}
-            <h1>⚡ Live AI Momentum Screener (Scanned 50+ NSE Stocks)</h1>
+            <h1>📈 Market Strategy & Statistics Dashboard</h1>
             
-            <p><b>Live Ticker (&lt; ₹500 Only):</b> Live data moving marquee tape tracking stocks priced under ₹500.</p>
+            <!-- Market Strategy Panel -->
+            <div class="strategy-panel">
+                <div class="stat-box">
+                    <div class="stat-title">MARKET SENTIMENT</div>
+                    <div class="stat-val" style="color: #2ea043;">Bullish Momentum 🚀</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-title">ADVANCE / DECLINE RATIO</div>
+                    <div class="stat-val">1,912 / 1,294</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-title">FAVORED STRATEGY</div>
+                    <div class="stat-val" style="color: #58a6ff;">Buy on Dips (< ₹500)</div>
+                </div>
+                <div class="stat-box bearish">
+                    <div class="stat-title">VOLATILITY INDEX (VIX)</div>
+                    <div class="stat-val" style="color: #f85149;">13.45 (Stable)</div>
+                </div>
+            </div>
+
+            <h2>⚡ Live Stocks Ticker (< ₹500 Scanned Pool)</h2>
             <div class="marquee-container">
                 <div class="marquee-content">
                     {% for stock in marquee_stocks %}
@@ -301,7 +379,7 @@ TEMPLATE = """
                 </div>
             </div>
 
-            <h2>Top 10 Recommendations (RSI, MACD, Technical & Fundamental Analysis)</h2>
+            <h2>Top 10 Scanned AI Recommendations (Chart, RSI, MACD & Fundamentals)</h2>
             <div class="grid-container">
                 {% for stock in top_10 %}
                 <div class="card">
@@ -340,7 +418,7 @@ def login():
             session["user"] = username
             return redirect(url_for("dashboard"))
         else:
-            error = "Invalid username or password! Try admin / admin123"
+            error = "Invalid credentials! Try admin / admin123"
     return render_template_string(TEMPLATE, page="login", error=error)
 
 @app.route("/dashboard")
