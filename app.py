@@ -193,9 +193,21 @@ def dashboard(request: Request):
         
         <!-- 1. RIGHT-TO-LEFT TICKER (UNDER RS. 300 3-MONTH PREDICTIONS) -->
         <div class="bg-gray-950 border-b border-gray-800 py-2 marquee text-sm text-gray-300">
-            <div class="marquee-content font-mono">
+            <div id="ticker-container" class="marquee-content font-mono">
                 🔥 TOP 10 STOCKS UNDER ₹300 (3-MONTH PREDICTION & SCANNER): {ticker_items}
             </div>
+        </div>
+
+        <!-- AUTO-REFRESH STATUS BADGE -->
+        <div class="bg-gray-900 border-b border-gray-800 px-6 py-1 flex justify-between items-center text-[10px] text-gray-400">
+            <div class="flex items-center gap-2">
+                <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span>LIVE FEED ACTIVE</span>
+            </div>
+            <div>Next auto-update in: <span id="countdown" class="text-emerald-400 font-bold font-mono">10</span>s</div>
         </div>
 
         <!-- 2. NAVBAR -->
@@ -228,7 +240,6 @@ def dashboard(request: Request):
                     <a href="#" class="text-emerald-400 text-xs hover:underline">VIEW ALL &gt;</a>
                 </div>
                 <div class="grid grid-cols-5 gap-3">
-                    <!-- Cards -->
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-lg">
                         <div class="font-bold text-white">IDEA</div>
                         <div class="text-gray-400 text-[10px]">VODAFONE IDEA LIMITED</div>
@@ -416,6 +427,19 @@ def dashboard(request: Request):
         </div>
 
         <script>
+            // AUTO-UPDATE TIMER (EVERY 10 SECONDS)
+            let countdown = 10;
+            const timerElement = document.getElementById('countdown');
+
+            setInterval(() => {{
+                countdown--;
+                if (countdown <= 0) {{
+                    window.location.reload();
+                }} else {{
+                    timerElement.innerText = countdown;
+                }}
+            }}, 1000);
+
             function toggleChat() {{
                 document.getElementById('chat-box').classList.toggle('hidden');
             }}
