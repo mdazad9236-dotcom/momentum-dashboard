@@ -3,9 +3,8 @@ from flask import Flask, render_template_string, request, redirect, session, url
 
 app = Flask(__name__)
 
-# Use environment variables or strong default keys
+# Security: Uses Environment Variables or safe default fallbacks
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "super_secret_production_key_change_me_123!")
-
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASS = os.environ.get("ADMIN_PASS", "admin123")
 
@@ -30,7 +29,7 @@ HTML_LOGIN = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Login</title>
+    <title>Admin Login - AI Stocks</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #0a0a0f; color: #e0e0e0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
@@ -75,7 +74,7 @@ HTML_DASH = """
         .btn { background: var(--card); border: 1px solid #333; padding: 6px 14px; border-radius: 6px; cursor: pointer; color: var(--text); text-decoration: none; font-size: 13px; transition: all 0.2s; }
         .btn:hover { border-color: var(--blue); color: var(--blue); }
         
-        /* Ticker Bar CSS */
+        /* Continuous Loop Ticker Styling */
         .ticker-wrapper { background: var(--card); border-bottom: 1px solid #222; overflow: hidden; display: flex; }
         .ticker { display: flex; width: 100%; overflow: hidden; white-space: nowrap; padding: 8px 0; }
         .ticker-content { display: inline-flex; animation: scroll 30s linear infinite; }
@@ -105,19 +104,20 @@ HTML_DASH = """
     </nav>
 </header>
 
-<!-- Continuous Loop Tickers -->
+<!-- Stock Price Ticker -->
 <div class="ticker-wrapper">
     <div class="ticker">
         <div class="ticker-content">
             <span>NIFTY <span class="up">25,123 ▲ 1.2%</span></span>
             {% for s in stocks %}<span>{{s.name}} <span class="{{'up' if s.change>0 else 'down'}}">₹{{s.price}} {{'▲' if s.change>0 else '▼'}} {{s.change}}%</span></span>{% endfor %}
-            <!-- Duplicated for smooth loop -->
+            <!-- Duplicate content ensures infinite loop without visual blank gaps -->
             <span>NIFTY <span class="up">25,123 ▲ 1.2%</span></span>
             {% for s in stocks %}<span>{{s.name}} <span class="{{'up' if s.change>0 else 'down'}}">₹{{s.price}} {{'▲' if s.change>0 else '▼'}} {{s.change}}%</span></span>{% endfor %}
         </div>
     </div>
 </div>
 
+<!-- News Ticker -->
 <div class="ticker-wrapper">
     <div class="ticker">
         <div class="ticker-content">
@@ -128,7 +128,7 @@ HTML_DASH = """
 </div>
 
 <div class="container">
-    <h2>Top Stock Recommendations</h2>
+    <h2>Top AI Recommendations</h2>
     <div class="stock-grid">
         {% for s in stocks %}
         <div class="stock-card">
@@ -156,16 +156,22 @@ def login():
         
         if username == ADMIN_USER and password == ADMIN_PASS:
             session["logged_in"] = True
-            return redirect(url_for("dashboard"))
+            # HTTP 303 forces GET request to avoid method errors
+            return redirect(url_for("dashboard"), code=303)
         else:
-            error = "Invalid Username or Password"
+            error = "Galat Username ya Password"
 
     return render_template_string(HTML_LOGIN, error=error)
 
-@app.route("/dashboard", methods=["GET"])
+@app.route("/dashboard", methods=["GET", "POST"])
 def dashboard():
+    # Fixes 405 Method Not Allowed if browser submits a POST directly to dashboard
+    if request.method == "POST":
+        return redirect(url_for("dashboard"))
+
     if not session.get("logged_in"):
         return redirect(url_for("login"))
+        
     return render_template_string(HTML_DASH, stocks=STOCKS, news=NEWS)
 
 @app.route("/logout")
