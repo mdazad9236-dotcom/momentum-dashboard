@@ -175,31 +175,19 @@ def serve_dashboard():
     </body>
     </html>
     """
+# --- FRONTEND ROUTE ---
+
 @app.get("/", response_class=HTMLResponse)
-def login():
-    error = None
-    if request.method == "POST":
-        username = request.form.get("username")
-        password = request.form.get("password")
-        if username in USERS and USERS[username] == password:
-            session["user"] = username
-            return redirect(url_for("dashboard"))
-        else:
-            error = "Invalid credentials! Try admin / admin123"
-    return render_template_string(TEMPLATE, page="login", error=error)
-
-@app.get("/dashboard")
-def dashboard():
-    if "user" not in session:
-        return redirect(url_for("login"))
-    
-    marquee_stocks, all_stocks = scan_stocks_parallel()
-    return render_template_string(TEMPLATE, page="dashboard", marquee_stocks=marquee_stocks, all_stocks=all_stocks)
-
-@app.get("/logout")
-def logout():
-    session.pop("user", None)
-    return redirect(url_for("login"))
-
-if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+def serve_dashboard():
+    return """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Dashboard</title>
+    </head>
+    <body>
+        <h1>Dashboard Active</h1>
+    </body>
+    </html>
+    """
