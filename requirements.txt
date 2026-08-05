@@ -1,28 +1,16 @@
-# Web Framework & Core Server
 fastapi
 uvicorn[standard]
 pydantic
-
-# Indian Broker SDKs
 dhanhq
 kiteconnect
-
-# Global Stock Data
 yfinance
 alpha_vantage
-
-# Data Processing & Technical Indicators
 pandas
 numpy
-pandas-ta
-
-# Async WebSockets & AI
 websockets
 openai
 google-genai
 langchain
 langchain-openai
-
-# Configuration & Utilities
 python-dotenv
 requests
