@@ -2,11 +2,10 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from dhanhq import DhanContext, dhanhq  # Dhan SDK
 
-app = FastAPI()
+app = FastAPI(title="Stock Dashboard API")
 
-# Allow Frontend access
+# Enable CORS for React frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,31 +14,59 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 1. Initialize Broker API (Dhan Example)
-DHAN_CLIENT_ID = os.getenv("DHAN_CLIENT_ID", "YOUR_CLIENT_ID")
-DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN", "YOUR_ACCESS_TOKEN")
-dhan_context = DhanContext(DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN)
-dhan = dhanhq(dhan_context)
-
-# 2. Stock Data Model & External Hyperlinks Map
-@app.get("/api/stock/{symbol}")
-def get_stock_details(symbol: str):
-    symbol_clean = symbol.upper()
-    return {
-        "symbol": symbol_clean,
-        "external_links": {
-            "screener": f"https://www.screener.in/company/{symbol_clean}/",
-            "tradingview": f"https://in.tradingview.com/symbols/NSE-{symbol_clean}/",
-            "chartink": f"https://chartink.com/stocks/{symbol_clean}.html"
+# Stock Data API Endpoint
+@app.get("/api/stocks")
+def get_stocks():
+    return [
+        {
+            "symbol": "TATAMOTORS",
+            "name": "Tata Motors Limited",
+            "price": "721.50",
+            "change": "+0.49%",
+            "status": "positive",
+            "screener_url": "https://www.screener.in/company/TATAMOTORS/",
+            "tradingview_url": "https://in.tradingview.com/symbols/NSE-TATAMOTORS/"
+        },
+        {
+            "symbol": "HYUNDAI",
+            "name": "Hyundai Motor India",
+            "price": "2,201.50",
+            "change": "+0.81%",
+            "status": "positive",
+            "screener_url": "https://www.screener.in/company/HYUNDAI/",
+            "tradingview_url": "https://in.tradingview.com/symbols/NSE-HYUNDAI/"
+        },
+        {
+            "symbol": "COALINDIA",
+            "name": "Coal India Ltd",
+            "price": "412.65",
+            "change": "-1.10%",
+            "status": "negative",
+            "screener_url": "https://www.screener.in/company/COALINDIA/",
+            "tradingview_url": "https://in.tradingview.com/symbols/NSE-COALINDIA/"
         }
-    }
+    ]
 
-# 3. Strategy Trigger & Demat Order Execution
-class StrategySignal(BaseModel):
-    security_id: str  # e.g., '1333' for HDFC Bank
-    symbol: str
-    action: str      # BUY or SELL
-    quantity: int
+# AI Assistant Query Model
+class ChatQuery(BaseModel):
+    prompt: str
+
+@app.post("/api/ai-chat")
+def ai_assistant(query: ChatQuery):
+    user_msg = query.prompt.lower()
+    
+    if "top performers" in user_msg:
+        reply = "Currently, TATA MOTORS (+0.49%) and HYUNDAI (+0.81%) are top gainers."
+    elif "strategy" in user_msg:
+        reply = "Your strategy monitored 3 stocks today. No new trade triggers."
+    else:
+        reply = f"Market AI Assistant received: '{query.prompt}'"
+
+    return {"response": reply}
+
+@app.get("/")
+def read_root():
+    return {"status": "Backend Server Running Successfully"}
 
 @app.post("/api/execute-strategy")
 def execute_strategy(signal: StrategySignal):
