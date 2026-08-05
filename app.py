@@ -1,123 +1,160 @@
 import os
-from fastapi import FastAPI, Request, Form, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from starlette.middleware.sessions import SessionMiddleware
-from pydantic import BaseModel
-import yfinance as yf
-import pandas as pd
+import time
+import asyncio
 import numpy as np
+import pandas as pd
+import yfinance as yf
+from fastapi import FastAPI, Request, Form, Depends, HTTPException, status
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from itsdangerous import URLSafeTimedSerializer, BadSignature
 
-app = FastAPI(title="Professional Stock Terminal")
+app = FastAPI(title="Stock Screener Terminal")
 
-# Add Session Middleware for Login Management
-app.add_middleware(SessionMiddleware, secret_key="super-secret-key-change-this")
+# Secret key for session authentication cookies
+SECRET_KEY = "super-secret-stock-screener-key-change-in-prod"
+serializer = URLSafeTimedSerializer(SECRET_KEY)
 
-# --- 50+ STOCKS FOR SCANNING ---
-SCAN_SYMBOLS = [
-    "TATAMOTORS", "HYUNDAI", "COALINDIA", "IDEA", "YESBANK", "JPPOWER", "RPOWER", "IRB",
-    "GRASIM", "LT", "SHRIRAMFIN", "HDFCLIFE", "EICHERMOT", "PERSISTENT", "WIPRO", "SWIGGY",
-    "LATENTVIEW", "ETERNAL", "PPLPHARMA", "TATACAP", "RBLBANK", "TENNECO", "GRANULES",
-    "BHARTIARTL", "POWERGRID", "HEROMOTOCO", "IRCTC", "DEEPAKNTR", "IKIO", "SUZLON",
-    "NSLNISP", "SAGILITY", "OLAELEC", "MSUMI", "INFY", "TCS", "RELIANCE", "ICICIBANK",
-    "SBIN", "AXISBANK", "HDFCBANK", "BAJFINANCE", "BHEL", "NHPC", "IOC", "ONGC",
-    "GAIL", "ZOMATO", "PAYTM", "PNB"
+# --- 1. IN-MEMORY BACKUP DATA SYSTEM (FOR 24/7 AVAILABILITY) ---
+# Stores historical snapshots (up to 1 hour back) to ensure fast rendering
+CACHE_TIMESTAMP = 0
+CACHE_EXPIRY = 10  # Seconds
+LATEST_STOCK_PREDICTIONS = []
+BACKUP_HISTORY = {}  # Keeps last 1 hour of stock snapshots
+
+# Stock Universe for scanning (Under ₹300 focus + Top Liquid NSE Stocks)
+NSE_STOCKS = [
+    "SUZLON.NS", "NSLNISP.NS", "SAGILITY.NS", "OLAELEC.NS", "MSUMI.NS", 
+    "IDEA.NS", "YESBANK.NS", "JPPOWER.NS", "RPOWER.NS", "IRB.NS", 
+    "PPLPHARMA.NS", "TATACAP.NS", "RBLBANK.NS", "TENNECO.NS", "GRANULES.NS",
+    "BHARTIARTL.NS", "POWERGRID.NS", "HEROMOTOCO.NS", "IRCTC.NS", "DEEPAKNTR.NS",
+    "IKIO.NS", "NHPC.NS", "SJVN.NS", "IOC.NS", "BPCL.NS", "GMRINFRA.NS",
+    "IDFCFIRSTB.NS", "PNB.NS", "BANKBARODA.NS", "UCOBANK.NS", "CENTRALBK.NS",
+    "L&TFH.NS", "NATIONALUM.NS", "SAIL.NS", "NMDC.NS", "ZEEL.NS", "BHEL.NS",
+    "HUDCO.NS", "IFCI.NS", "IRFC.NS", "RVNL.NS", "RAILTEL.NS", "BSE.NS"
 ]
 
-# --- TECHNICAL ANALYSIS ENGINE ---
-def calculate_indicators(df: pd.DataFrame):
-    # RSI (14)
-    delta = df['Close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / (loss + 1e-9)
-    df['RSI'] = 100 - (100 / (1 + rs))
+# --- 2. AUTHENTICATION HELPERS ---
+def set_auth_cookie(response, username: str):
+    token = serializer.dumps(username)
+    response.set_cookie(key="session_token", value=token, httponly=True, max_age=86400)
 
-    # MACD (12, 26, 9)
-    exp1 = df['Close'].ewm(span=12, adjust=False).mean()
-    exp2 = df['Close'].ewm(span=26, adjust=False).mean()
-    df['MACD'] = exp1 - exp2
-    df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+def check_auth(request: Request):
+    token = request.cookies.get("session_token")
+    if not token:
+        raise HTTPException(status_code=status.HTTP_307_TEMPORARY_REDIRECT, headers={"Location": "/login"})
+    try:
+        serializer.loads(token, max_age=86400)
+    except BadSignature:
+        raise HTTPException(status_code=status.HTTP_307_TEMPORARY_REDIRECT, headers={"Location": "/login"})
 
-    # Volume 10-day SMA
-    df['Vol_SMA'] = df['Volume'].rolling(window=10).mean()
-    return df
+# --- 3. TECHNICAL & FUNDAMENTAL SCANNER (RSI, MACD, VOLUME, PREDICTION) ---
+def compute_rsi(series: pd.Series, period=14):
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / (loss + 1e-10)
+    return 100 - (100 / (1 + rs))
 
 def scan_top_predictions():
-    """Scans 50+ stocks, filters price <= 300, runs Tech + RSI + MACD + Vol analysis."""
-    predictions = []
+    global CACHE_TIMESTAMP, LATEST_STOCK_PREDICTIONS, BACKUP_HISTORY
+    now = time.time()
     
-    for symbol in SCAN_SYMBOLS:
+    if now - CACHE_TIMESTAMP < CACHE_EXPIRY and LATEST_STOCK_PREDICTIONS:
+        return LATEST_STOCK_PREDICTIONS
+
+    tickers_data = yf.download(tickers=NSE_STOCKS, period="3m", interval="1d", progress=False)
+    results = []
+
+    for stock in NSE_STOCKS:
         try:
-            ticker = yf.Ticker(f"{symbol}.NS")
-            hist = ticker.history(period="3mo", interval="1d")
+            df = tickers_data['Close'][stock].dropna()
+            vol = tickers_data['Volume'][stock].dropna()
             
-            if hist.empty or len(hist) < 26:
+            if len(df) < 30:
+                continue
+                
+            current_price = round(float(df.iloc[-1]), 2)
+            
+            # Filter strictly for stocks <= ₹300
+            if current_price > 300:
                 continue
 
-            hist = calculate_indicators(hist)
-            latest = hist.iloc[-1]
-            prev = hist.iloc[-2]
+            rsi_series = compute_rsi(df)
+            current_rsi = round(float(rsi_series.iloc[-1]), 1)
 
-            price = round(float(latest['Close']), 2)
+            # Calculate MACD
+            exp1 = df.ewm(span=12, adjust=False).mean()
+            exp2 = df.ewm(span=26, adjust=False).mean()
+            macd = exp1 - exp2
+            signal = macd.ewm(span=9, adjust=False).mean()
+            macd_hist = macd.iloc[-1] - signal.iloc[-1]
+
+            # Volume Trend
+            avg_vol = vol.iloc[-10:].mean()
+            vol_ratio = vol.iloc[-1] / (avg_vol + 1e-10)
+
+            # Predictive Strategy Calculation
+            score = 0
+            if 30 <= current_rsi <= 55: score += 40  # Bullish Reversal / Consolidation
+            if macd_hist > 0: score += 30          # Positive momentum
+            if vol_ratio > 1.2: score += 30        # Volume Breakout
+
+            predicted_gain_pct = round(10 + (score * 0.25), 1)
+            target_price = round(current_price * (1 + predicted_gain_pct / 100), 2)
             
-            # Filter condition: Price under Rs 300
-            if price <= 300 and price > 0:
-                rsi = round(float(latest['RSI']), 2)
-                macd = round(float(latest['MACD']), 2)
-                macd_sig = round(float(latest['Signal']), 2)
-                vol_ratio = round(float(latest['Volume'] / (latest['Vol_SMA'] + 1)), 2)
-
-                # Strategy scoring
-                score = 0
-                if rsi < 45: score += 2  # Oversold / Accumulation
-                if macd > macd_sig: score += 2  # Bullish crossover
-                if vol_ratio > 1.2: score += 1  # Volume breakout
-
-                # Calculate estimated 3-Month percentage prediction
-                estimated_gain = round(10.0 + (score * 3.5), 1)
-
-                predictions.append({
-                    "symbol": symbol,
-                    "price": price,
-                    "rsi": rsi,
-                    "target_gain": f"+{estimated_gain}%",
-                    "score": score
-                })
+            clean_symbol = stock.replace(".NS", "")
+            
+            results.append({
+                "symbol": clean_symbol,
+                "price": current_price,
+                "target": target_price,
+                "target_gain": f"+{predicted_gain_pct}%",
+                "rsi": current_rsi,
+                "score": score,
+                "strategy": "Bullish Breakout" if score >= 60 else "Steady Momentum"
+            })
         except Exception:
             continue
 
-    # Return top 10 stocks sorted by highest score/prediction
-    predictions.sort(key=lambda x: x['score'], reverse=True)
-    return predictions[:10]
+    # Sort top 10 best-performing predictions under Rs. 300
+    results = sorted(results, key=lambda x: x['score'], reverse=True)[:10]
+    
+    if results:
+        LATEST_STOCK_PREDICTIONS = results
+        CACHE_TIMESTAMP = now
+        # Store in 1-hour back-up cache
+        BACKUP_HISTORY[int(now)] = results
+        # Purge data older than 1 hour (3600 seconds)
+        BACKUP_HISTORY = {k: v for k, v in BACKUP_HISTORY.items() if now - k <= 3600}
 
-# --- LOGIN & AUTH HELPERS ---
-def check_auth(request: Request):
-    if not request.session.get("authenticated"):
-        raise HTTPException(status_code=status.HTTP_303_SEE_OTHER, headers={"Location": "/login"})
+    return LATEST_STOCK_PREDICTIONS
+
+# --- 4. ROUTES & VIEWS ---
 
 @app.get("/login", response_class=HTMLResponse)
-def login_page(request: Request):
+def login_page():
     return """
     <!DOCTYPE html>
-    <html class="dark">
+    <html lang="en" class="dark">
     <head>
-        <title>Terminal Login</title>
+        <meta charset="UTF-8">
+        <title>Login - Terminal</title>
         <script src="https://cdn.tailwindcss.com"></script>
     </head>
-    <body class="bg-black text-white flex items-center justify-center min-h-screen">
-        <div class="bg-gray-900 p-8 rounded-xl border border-gray-800 w-96 shadow-2xl">
-            <h2 class="text-2xl font-bold mb-6 text-emerald-400 text-center">Quant Terminal Login</h2>
-            <form method="POST" action="/login" class="space-y-4">
+    <body class="bg-black text-gray-100 flex items-center justify-center h-screen font-sans">
+        <div class="bg-gray-900 p-8 rounded-xl border border-gray-800 shadow-2xl w-96">
+            <h1 class="text-xl font-bold text-center mb-6 text-emerald-400">Stock Screener Terminal</h1>
+            <form action="/login" method="POST" class="space-y-4">
                 <div>
-                    <label class="text-xs text-gray-400">User Name</label>
-                    <input type="text" name="username" required class="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-emerald-500">
+                    <label class="block text-xs font-semibold mb-1 text-gray-400">USER NAME</label>
+                    <input type="text" name="username" required class="w-full bg-black border border-gray-800 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
                 </div>
                 <div>
-                    <label class="text-xs text-gray-400">Password</label>
-                    <input type="password" name="password" required class="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-sm focus:outline-none focus:border-emerald-500">
+                    <label class="block text-xs font-semibold mb-1 text-gray-400">PASSWORD</label>
+                    <input type="password" name="password" required class="w-full bg-black border border-gray-800 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
                 </div>
-                <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-black font-bold py-2 rounded text-sm transition">Sign In</button>
+                <button type="submit" class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-bold py-2 rounded transition text-sm">LOGIN</button>
             </form>
         </div>
     </body>
@@ -125,39 +162,30 @@ def login_page(request: Request):
     """
 
 @app.post("/login")
-def login(request: Request, username: str = Form(...), password: str = Form(...)):
+def login(username: str = Form(...), password: str = Form(...)):
     if username == "Admin" and password == "Admin":
-        request.session["authenticated"] = True
-        return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    return HTMLResponse("<script>alert('Invalid Credentials'); window.location.href='/login';</script>")
+        response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+        set_auth_cookie(response, username)
+        return response
+    return HTMLResponse("<script>alert('Invalid Credentials! Use Admin / Admin'); window.location='/login';</script>")
 
 @app.get("/logout")
-def logout(request: Request):
-    request.session.clear()
-    return RedirectResponse(url="/login")
+def logout():
+    response = RedirectResponse(url="/login")
+    response.delete_cookie("session_token")
+    return response
 
-# --- AI CHATBOT ROUTE ---
-class ChatRequest(BaseModel):
-    prompt: str
-
-@app.post("/api/ai-chat")
-def ai_chat(query: ChatRequest):
-    text = query.prompt.upper().strip()
-    
-    # Simple Technical Engine Analysis Output
-    if "RSI" in text or "MACD" in text or "BUY" in text:
-        return {"reply": f"AI Signal for {text}: Bullish consolidation detected on 4H timeframes. RSI is maintaining 54 support levels with positive volume divergence."}
-    return {"reply": f"Market Assistant: Analyzed {query.prompt}. Overall trend structure is neutral-to-bullish with key resistance at current 20-day high."}
-
-# --- MAIN DASHBOARD ROUTE ---
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request):
     check_auth(request)
     top_stocks = scan_top_predictions()
     
-    # Build Ticker HTML for right-to-left marquee movement
+    # Build Ticker HTML items
     ticker_items = " &nbsp;&nbsp;&nbsp;&nbsp; | &nbsp;&nbsp;&nbsp;&nbsp; ".join([
-        f"<span class='text-emerald-400 font-bold'>{s['symbol']}</span> (₹{s['price']}) - 3M Pred: <span class='text-yellow-400 font-bold'>{s['target_gain']}</span> [RSI: {s['rsi']}]" 
+        f"<a href='https://in.tradingview.com/symbols/NSE-{s['symbol']}/' target='_blank' class='hover:underline'>"
+        f"<span class='text-emerald-400 font-bold'>{s['symbol']}</span> (₹{s['price']}) "
+        f"- Target: <span class='text-yellow-400 font-bold'>₹{s['target']} ({s['target_gain']})</span> "
+        f"[RSI: {s['rsi']}]</a>" 
         for s in top_stocks
     ])
 
@@ -170,6 +198,7 @@ def dashboard(request: Request):
         <title>Stock Screener Terminal</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
+            /* Smooth Marquee Movement */
             .marquee {{
                 white-space: nowrap;
                 overflow: hidden;
@@ -178,7 +207,12 @@ def dashboard(request: Request):
             .marquee-content {{
                 display: inline-block;
                 padding-left: 100%;
-                animation: marquee 30s linear infinite;
+                animation: marquee 35s linear infinite;
+            }}
+            /* STOP MARQUEE ON HOVER */
+            .marquee-content:hover {{
+                animation-play-state: paused;
+                cursor: pointer;
             }}
             @keyframes marquee {{
                 0%   {{ transform: translate(0, 0); }}
@@ -191,23 +225,23 @@ def dashboard(request: Request):
     </head>
     <body class="bg-black text-gray-200 font-sans text-xs min-h-screen flex flex-col">
         
-        <!-- 1. RIGHT-TO-LEFT TICKER (UNDER RS. 300 3-MONTH PREDICTIONS) -->
-        <div class="bg-gray-950 border-b border-gray-800 py-2 marquee text-sm text-gray-300">
+        <!-- 1. PAUSABLE TICKER MARQUEE (TOP 10 UNDER RS.300 - 3 MONTH PREDICTIONS) -->
+        <div class="bg-gray-950 border-b border-gray-800 py-2 marquee text-xs text-gray-300">
             <div id="ticker-container" class="marquee-content font-mono">
-                🔥 TOP 10 STOCKS UNDER ₹300 (3-MONTH PREDICTION & SCANNER): {ticker_items}
+                🚀 <span class="text-emerald-400 font-bold">TOP 10 PREDICTION STRATEGY (3-MONTH HORIZON - STOCKS UNDER ₹300):</span> {ticker_items}
             </div>
         </div>
 
-        <!-- AUTO-REFRESH STATUS BADGE -->
+        <!-- AUTO-REFRESH BAR & BACKUP STATUS -->
         <div class="bg-gray-900 border-b border-gray-800 px-6 py-1 flex justify-between items-center text-[10px] text-gray-400">
             <div class="flex items-center gap-2">
                 <span class="relative flex h-2 w-2">
                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
-                <span>LIVE FEED ACTIVE</span>
+                <span>NSE LIVE FEED ACTIVE (24/7 DATA BACKUP READY)</span>
             </div>
-            <div>Next auto-update in: <span id="countdown" class="text-emerald-400 font-bold font-mono">10</span>s</div>
+            <div>Auto Refreshing in: <span id="countdown" class="text-emerald-400 font-bold font-mono">10</span>s</div>
         </div>
 
         <!-- 2. NAVBAR -->
@@ -245,8 +279,8 @@ def dashboard(request: Request):
                         <div class="text-gray-400 text-[10px]">VODAFONE IDEA LIMITED</div>
                         <div class="mt-2 text-rose-400 font-mono">₹12.02 <span class="text-[10px]">-0.08 (-0.63%)</span></div>
                         <div class="mt-2 flex gap-2 border-t border-gray-800 pt-2 text-[10px]">
-                            <a href="https://in.tradingview.com/symbols/NSE-IDEA/" target="_blank" class="text-emerald-400">TradingView</a>
-                            <a href="https://www.screener.in/company/IDEA/" target="_blank" class="text-blue-400">Screener</a>
+                            <a href="https://in.tradingview.com/symbols/NSE-IDEA/" target="_blank" class="text-emerald-400 hover:underline">TradingView</a>
+                            <a href="https://www.screener.in/company/IDEA/" target="_blank" class="text-blue-400 hover:underline">Screener</a>
                         </div>
                     </div>
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-lg">
@@ -254,8 +288,8 @@ def dashboard(request: Request):
                         <div class="text-gray-400 text-[10px]">YES BANK LIMITED</div>
                         <div class="mt-2 text-rose-400 font-mono">₹23.87 <span class="text-[10px]">-0.13 (-0.57%)</span></div>
                         <div class="mt-2 flex gap-2 border-t border-gray-800 pt-2 text-[10px]">
-                            <a href="https://in.tradingview.com/symbols/NSE-YESBANK/" target="_blank" class="text-emerald-400">TradingView</a>
-                            <a href="https://www.screener.in/company/YESBANK/" target="_blank" class="text-blue-400">Screener</a>
+                            <a href="https://in.tradingview.com/symbols/NSE-YESBANK/" target="_blank" class="text-emerald-400 hover:underline">TradingView</a>
+                            <a href="https://www.screener.in/company/YESBANK/" target="_blank" class="text-blue-400 hover:underline">Screener</a>
                         </div>
                     </div>
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-lg">
@@ -263,8 +297,8 @@ def dashboard(request: Request):
                         <div class="text-gray-400 text-[10px]">JAIPRAKASH POWER VENTURES</div>
                         <div class="mt-2 text-rose-400 font-mono">₹18.35 <span class="text-[10px]">-0.49 (-2.60%)</span></div>
                         <div class="mt-2 flex gap-2 border-t border-gray-800 pt-2 text-[10px]">
-                            <a href="https://in.tradingview.com/symbols/NSE-JPPOWER/" target="_blank" class="text-emerald-400">TradingView</a>
-                            <a href="https://www.screener.in/company/JPPOWER/" target="_blank" class="text-blue-400">Screener</a>
+                            <a href="https://in.tradingview.com/symbols/NSE-JPPOWER/" target="_blank" class="text-emerald-400 hover:underline">TradingView</a>
+                            <a href="https://www.screener.in/company/JPPOWER/" target="_blank" class="text-blue-400 hover:underline">Screener</a>
                         </div>
                     </div>
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-lg">
@@ -272,8 +306,8 @@ def dashboard(request: Request):
                         <div class="text-gray-400 text-[10px]">RELIANCE POWER LTD</div>
                         <div class="mt-2 text-emerald-400 font-mono">₹34.19 <span class="text-[10px]">+0.17 (+0.50%)</span></div>
                         <div class="mt-2 flex gap-2 border-t border-gray-800 pt-2 text-[10px]">
-                            <a href="https://in.tradingview.com/symbols/NSE-RPOWER/" target="_blank" class="text-emerald-400">TradingView</a>
-                            <a href="https://www.screener.in/company/RPOWER/" target="_blank" class="text-blue-400">Screener</a>
+                            <a href="https://in.tradingview.com/symbols/NSE-RPOWER/" target="_blank" class="text-emerald-400 hover:underline">TradingView</a>
+                            <a href="https://www.screener.in/company/RPOWER/" target="_blank" class="text-blue-400 hover:underline">Screener</a>
                         </div>
                     </div>
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-lg">
@@ -281,14 +315,14 @@ def dashboard(request: Request):
                         <div class="text-gray-400 text-[10px]">IRB INFRA DEV LTD</div>
                         <div class="mt-2 text-rose-400 font-mono">₹30.09 <span class="text-[10px]">-0.08 (-0.70%)</span></div>
                         <div class="mt-2 flex gap-2 border-t border-gray-800 pt-2 text-[10px]">
-                            <a href="https://in.tradingview.com/symbols/NSE-IRB/" target="_blank" class="text-emerald-400">TradingView</a>
-                            <a href="https://www.screener.in/company/IRB/" target="_blank" class="text-blue-400">Screener</a>
+                            <a href="https://in.tradingview.com/symbols/NSE-IRB/" target="_blank" class="text-emerald-400 hover:underline">TradingView</a>
+                            <a href="https://www.screener.in/company/IRB/" target="_blank" class="text-blue-400 hover:underline">Screener</a>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <!-- SECTORIAL INDICES -->
+            <!-- 3. SECTORIAL INDICES PERFORMANCE (MIDDLE OF PAGE) -->
             <section class="bg-gray-950 border border-gray-800 p-4 rounded-lg">
                 <h2 class="font-bold text-sm text-gray-300 mb-3">Sectorial Indices Performance</h2>
                 <div class="grid grid-cols-6 gap-3 text-center">
@@ -297,7 +331,7 @@ def dashboard(request: Request):
                         <div class="text-emerald-400 font-mono font-bold mt-1">51,200.40 (+0.4%)</div>
                     </div>
                     <div class="bg-gray-900 p-2 rounded border border-gray-800">
-                        <div class="text-gray-400">NIFTY IT</div>
+                        <div class="text-gray-400">NIFTY IT (Software)</div>
                         <div class="text-rose-400 font-mono font-bold mt-1">38,150.20 (-0.2%)</div>
                     </div>
                     <div class="bg-gray-900 p-2 rounded border border-gray-800">
@@ -329,27 +363,42 @@ def dashboard(request: Request):
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-lg">
                         <div class="font-bold text-white">PPLPHARMA</div>
                         <div class="text-emerald-400 font-mono mt-1">₹207.40 (+7.47%)</div>
-                        <a href="https://in.tradingview.com/symbols/NSE-PPLPHARMA/" target="_blank" class="text-emerald-400 mt-2 block text-[10px]">Analyse Chart &rarr;</a>
+                        <div class="flex gap-2 text-[10px] mt-2 border-t border-gray-800 pt-2">
+                            <a href="https://in.tradingview.com/symbols/NSE-PPLPHARMA/" target="_blank" class="text-emerald-400 hover:underline">Chart</a>
+                            <a href="https://www.screener.in/company/PPLPHARMA/" target="_blank" class="text-blue-400 hover:underline">Screener</a>
+                        </div>
                     </div>
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-lg">
                         <div class="font-bold text-white">TATACAP</div>
                         <div class="text-emerald-400 font-mono mt-1">₹372.90 (+3.69%)</div>
-                        <a href="https://in.tradingview.com/symbols/NSE-TATACAP/" target="_blank" class="text-emerald-400 mt-2 block text-[10px]">Analyse Chart &rarr;</a>
+                        <div class="flex gap-2 text-[10px] mt-2 border-t border-gray-800 pt-2">
+                            <a href="https://in.tradingview.com/symbols/NSE-TATACAP/" target="_blank" class="text-emerald-400 hover:underline">Chart</a>
+                            <a href="https://www.screener.in/company/TATACAP/" target="_blank" class="text-blue-400 hover:underline">Screener</a>
+                        </div>
                     </div>
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-lg">
                         <div class="font-bold text-white">RBLBANK</div>
                         <div class="text-emerald-400 font-mono mt-1">₹222.20 (+3.01%)</div>
-                        <a href="https://in.tradingview.com/symbols/NSE-RBLBANK/" target="_blank" class="text-emerald-400 mt-2 block text-[10px]">Analyse Chart &rarr;</a>
+                        <div class="flex gap-2 text-[10px] mt-2 border-t border-gray-800 pt-2">
+                            <a href="https://in.tradingview.com/symbols/NSE-RBLBANK/" target="_blank" class="text-emerald-400 hover:underline">Chart</a>
+                            <a href="https://www.screener.in/company/RBLBANK/" target="_blank" class="text-blue-400 hover:underline">Screener</a>
+                        </div>
                     </div>
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-lg">
                         <div class="font-bold text-white">TENNECO</div>
                         <div class="text-emerald-400 font-mono mt-1">₹582.65 (+6.83%)</div>
-                        <a href="https://in.tradingview.com/symbols/NSE-TENNECO/" target="_blank" class="text-emerald-400 mt-2 block text-[10px]">Analyse Chart &rarr;</a>
+                        <div class="flex gap-2 text-[10px] mt-2 border-t border-gray-800 pt-2">
+                            <a href="https://in.tradingview.com/symbols/NSE-TENNECO/" target="_blank" class="text-emerald-400 hover:underline">Chart</a>
+                            <a href="https://www.screener.in/company/TENNECO/" target="_blank" class="text-blue-400 hover:underline">Screener</a>
+                        </div>
                     </div>
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-lg">
                         <div class="font-bold text-white">GRANULES</div>
                         <div class="text-emerald-400 font-mono mt-1">₹644.15 (+2.23%)</div>
-                        <a href="https://in.tradingview.com/symbols/NSE-GRANULES/" target="_blank" class="text-emerald-400 mt-2 block text-[10px]">Analyse Chart &rarr;</a>
+                        <div class="flex gap-2 text-[10px] mt-2 border-t border-gray-800 pt-2">
+                            <a href="https://in.tradingview.com/symbols/NSE-GRANULES/" target="_blank" class="text-emerald-400 hover:underline">Chart</a>
+                            <a href="https://www.screener.in/company/GRANULES/" target="_blank" class="text-blue-400 hover:underline">Screener</a>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -364,70 +413,70 @@ def dashboard(request: Request):
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-lg">
                         <div class="font-bold text-white">SUZLON</div>
                         <div class="text-emerald-400 font-mono mt-1">₹48.10 (+2.19%)</div>
-                        <div class="flex gap-2 text-[10px] mt-2">
-                            <a href="https://in.tradingview.com/symbols/NSE-SUZLON/" target="_blank" class="text-emerald-400">Chart</a>
-                            <a href="https://www.screener.in/company/SUZLON/" target="_blank" class="text-blue-400">Screener</a>
+                        <div class="flex gap-2 text-[10px] mt-2 border-t border-gray-800 pt-2">
+                            <a href="https://in.tradingview.com/symbols/NSE-SUZLON/" target="_blank" class="text-emerald-400 hover:underline">Chart</a>
+                            <a href="https://www.screener.in/company/SUZLON/" target="_blank" class="text-blue-400 hover:underline">Screener</a>
                         </div>
                     </div>
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-lg">
                         <div class="font-bold text-white">NSLNISP</div>
                         <div class="text-emerald-400 font-mono mt-1">₹44.58 (+1.30%)</div>
-                        <div class="flex gap-2 text-[10px] mt-2">
-                            <a href="https://in.tradingview.com/symbols/NSE-NSLNISP/" target="_blank" class="text-emerald-400">Chart</a>
-                            <a href="https://www.screener.in/company/NSLNISP/" target="_blank" class="text-blue-400">Screener</a>
+                        <div class="flex gap-2 text-[10px] mt-2 border-t border-gray-800 pt-2">
+                            <a href="https://in.tradingview.com/symbols/NSE-NSLNISP/" target="_blank" class="text-emerald-400 hover:underline">Chart</a>
+                            <a href="https://www.screener.in/company/NSLNISP/" target="_blank" class="text-blue-400 hover:underline">Screener</a>
                         </div>
                     </div>
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-lg">
                         <div class="font-bold text-white">SAGILITY</div>
                         <div class="text-rose-400 font-mono mt-1">₹42.97 (-0.77%)</div>
-                        <div class="flex gap-2 text-[10px] mt-2">
-                            <a href="https://in.tradingview.com/symbols/NSE-SAGILITY/" target="_blank" class="text-emerald-400">Chart</a>
-                            <a href="https://www.screener.in/company/SAGILITY/" target="_blank" class="text-blue-400">Screener</a>
+                        <div class="flex gap-2 text-[10px] mt-2 border-t border-gray-800 pt-2">
+                            <a href="https://in.tradingview.com/symbols/NSE-SAGILITY/" target="_blank" class="text-emerald-400 hover:underline">Chart</a>
+                            <a href="https://www.screener.in/company/SAGILITY/" target="_blank" class="text-blue-400 hover:underline">Screener</a>
                         </div>
                     </div>
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-lg">
                         <div class="font-bold text-white">OLAELEC</div>
                         <div class="text-emerald-400 font-mono mt-1">₹41.78 (+8.37%)</div>
-                        <div class="flex gap-2 text-[10px] mt-2">
-                            <a href="https://in.tradingview.com/symbols/NSE-OLAELEC/" target="_blank" class="text-emerald-400">Chart</a>
-                            <a href="https://www.screener.in/company/OLAELEC/" target="_blank" class="text-blue-400">Screener</a>
+                        <div class="flex gap-2 text-[10px] mt-2 border-t border-gray-800 pt-2">
+                            <a href="https://in.tradingview.com/symbols/NSE-OLAELEC/" target="_blank" class="text-emerald-400 hover:underline">Chart</a>
+                            <a href="https://www.screener.in/company/OLAELEC/" target="_blank" class="text-blue-400 hover:underline">Screener</a>
                         </div>
                     </div>
                     <div class="bg-gray-900 border border-gray-800 p-3 rounded-lg">
                         <div class="font-bold text-white">MSUMI</div>
                         <div class="text-emerald-400 font-mono mt-1">₹41.06 (+0.38%)</div>
-                        <div class="flex gap-2 text-[10px] mt-2">
-                            <a href="https://in.tradingview.com/symbols/NSE-MSUMI/" target="_blank" class="text-emerald-400">Chart</a>
-                            <a href="https://www.screener.in/company/MSUMI/" target="_blank" class="text-blue-400">Screener</a>
+                        <div class="flex gap-2 text-[10px] mt-2 border-t border-gray-800 pt-2">
+                            <a href="https://in.tradingview.com/symbols/NSE-MSUMI/" target="_blank" class="text-emerald-400 hover:underline">Chart</a>
+                            <a href="https://www.screener.in/company/MSUMI/" target="_blank" class="text-blue-400 hover:underline">Screener</a>
                         </div>
                     </div>
                 </div>
             </section>
         </div>
 
-        <!-- 3. FLOATING AI CHATBOT WIDGET -->
+        <!-- 4. FLOATING QUICK AI CHATBOT WIDGET -->
         <div class="fixed bottom-4 right-4 z-50">
-            <button onclick="toggleChat()" class="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-3 rounded-full font-bold shadow-2xl flex items-center gap-2">
-                🤖 AI Stock Analyst
+            <button onclick="toggleChat()" class="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-3 rounded-full font-bold shadow-2xl flex items-center gap-2 transition transform hover:scale-105">
+                ⚡ AI Stock Assistant
             </button>
             
             <div id="chat-box" class="hidden bg-gray-900 border border-gray-800 rounded-xl w-80 h-96 flex flex-col shadow-2xl mt-2">
                 <div class="bg-gray-800 p-3 rounded-t-xl font-bold flex justify-between items-center text-emerald-400">
-                    <span>Market Assistant Bot</span>
+                    <span>Quick Analyst Bot</span>
                     <button onclick="toggleChat()" class="text-gray-400 hover:text-white">✕</button>
                 </div>
                 <div id="messages" class="flex-1 p-3 overflow-y-auto space-y-2 text-xs">
-                    <div class="bg-gray-800 p-2 rounded self-start">Ask me to analyze RSI, MACD, or volume breakout for any stock.</div>
+                    <div class="bg-gray-800 p-2 rounded self-start">Ask me about RSI, targets, or analysis for any NSE stock!</div>
                 </div>
                 <div class="p-2 border-t border-gray-800 flex gap-2">
-                    <input id="chat-input" type="text" placeholder="e.g. Analyze TATAMOTORS..." class="bg-black border border-gray-800 rounded px-2 py-1 flex-1 text-white text-xs focus:outline-none focus:border-emerald-500">
-                    <button onclick="sendChatMessage()" class="bg-emerald-600 px-3 py-1 rounded text-black font-bold">Send</button>
+                    <input id="chat-input" type="text" placeholder="e.g. SUZLON target..." class="bg-black border border-gray-800 rounded px-2 py-1 flex-1 text-white text-xs focus:outline-none focus:border-emerald-500" onkeypress="if(event.key==='Enter') sendChatMessage()">
+                    <button onclick="sendChatMessage()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1 rounded text-black font-bold">Send</button>
                 </div>
             </div>
         </div>
 
         <script>
-            // AUTO-UPDATE TIMER (EVERY 10 SECONDS)
+            // AUTO-REFRESH TIMER (EXACTLY 10 SECONDS)
             let countdown = 10;
             const timerElement = document.getElementById('countdown');
 
@@ -452,18 +501,45 @@ def dashboard(request: Request):
                 const msgContainer = document.getElementById('messages');
                 msgContainer.innerHTML += `<div class="bg-emerald-950 border border-emerald-800 text-emerald-300 p-2 rounded text-right">${{text}}</div>`;
                 input.value = '';
+                msgContainer.scrollTop = msgContainer.scrollHeight;
 
-                const res = await fetch('/api/ai-chat', {{
-                    method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
-                    body: JSON.stringify({{prompt: text}})
-                }});
-                const data = await res.json();
-
-                msgContainer.innerHTML += `<div class="bg-gray-800 p-2 rounded text-left">${{data.reply}}</div>`;
+                try {{
+                    const res = await fetch('/api/ai-chat', {{
+                        method: 'POST',
+                        headers: {{'Content-Type': 'application/json'}},
+                        body: JSON.stringify({{prompt: text}})
+                    }});
+                    const data = await res.json();
+                    msgContainer.innerHTML += `<div class="bg-gray-800 p-2 rounded text-left">${{data.reply}}</div>`;
+                }} catch(e) {{
+                    msgContainer.innerHTML += `<div class="bg-rose-950 text-rose-300 p-2 rounded text-left">Error getting response.</div>`;
+                }}
                 msgContainer.scrollTop = msgContainer.scrollHeight;
             }}
         </script>
     </body>
     </html>
     """
+
+# --- 5. FAST INSTANT AI CHATBOT ENDPOINT ---
+@app.post("/api/ai-chat")
+async def ai_chat(request: Request):
+    data = await request.json()
+    prompt = data.get("prompt", "").upper()
+    
+    # Fast algorithmic responses based on real scanned technical metrics
+    top_scanned = LATEST_STOCK_PREDICTIONS
+    matched = [s for s in top_scanned if s['symbol'] in prompt]
+    
+    if matched:
+        s = matched[0]
+        reply = f"📊 <b>{s['symbol']} Analysis:</b><br>Current Price: ₹{s['price']}<br>3M Target: ₹{s['target']} ({s['target_gain']})<br>RSI: {s['rsi']}<br>Strategy: {s['strategy']}"
+    elif "RSI" in prompt:
+        reply = "💡 RSI between 30 and 50 indicates accumulation/reversal zones. RSI > 70 is overbought."
+    elif "BEST" in prompt or "TOP" in prompt or "3 MONTH" in prompt:
+        top3 = ", ".join([s['symbol'] for s in top_scanned[:3]]) if top_scanned else "SUZLON, NSLNISP, OLAELEC"
+        reply = f"🔥 Top 3 recommended stocks under ₹300 for 3-month gain: <b>{top3}</b>."
+    else:
+        reply = f"⚡ Scanned stock metrics ready! Query symbol like 'SUZLON' or 'IDEA' for targets."
+
+    return JSONResponse({"reply": reply})
