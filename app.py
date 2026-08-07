@@ -1,5 +1,10 @@
 # app.py
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, render_template
+
+@app.route("/")
+def home():
+    return render_template("index.html")\
+    
 from config import APP_NAME
 from stock_service import get_stock_data, StockService
 from analysis import analyze_stock
