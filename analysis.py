@@ -1,111 +1,227 @@
 import pandas as pd
-
-from ta.trend import EMAIndicator
-from ta.trend import SMAIndicator
-from ta.trend import MACD
-from ta.trend import ADXIndicator
-
-from ta.momentum import RSIIndicator
-
-from ta.volatility import BollingerBands
-from ta.volatility import AverageTrueRange
-
-from ta.volume import VolumeWeightedAveragePrice
+import numpy as np
 
 
 class TechnicalAnalyzer:
 
-    def __init__(self, df: pd.DataFrame):
-        self.df = df.copy()
+    def __init__(self, history: pd.DataFrame):
+        self.df = history.copy()
 
+    # ----------------------------
+    # RSI
+    # ----------------------------
+    def calculate_rsi(self, period=14):
+
+        delta = self.df["Close"].diff()
+
+        gain = delta.where(delta > 0, 0)
+        loss = -delta.where(delta < 0, 0)
+
+        avg_gain = gain.rolling(period).mean()
+        avg_loss = loss.rolling(period).mean()
+
+        rs = avg_gain / avg_loss
+
+        rsi = 100 - (100 / (1 + rs))
+
+        return round(float(rsi.iloc[-1]), 2)
+
+    # ----------------------------
+    # EMA
+    # ----------------------------
+    def ema(self, period):
+
+        return round(
+            float(
+                self.df["Close"]
+                .ewm(span=period, adjust=False)
+                .mean()
+                .iloc[-1]
+            ),
+            2
+        )
+
+    # ----------------------------
+    # MACD
+    # ----------------------------
+    def macd(self):
+
+        ema12 = self.df["Close"].ewm(span=12).mean()
+
+        ema26 = self.df["Close"].ewm(span=26).mean()
+
+        macd = ema12 - ema26
+
+        signal = macd.ewm(span=9).mean()
+
+        histogram = macd - signal
+
+        return {
+            "macd": round(float(macd.iloc[-1]), 2),
+            "signal": round(float(signal.iloc[-1]), 2),
+            "histogram": round(float(histogram.iloc[-1]), 2)
+        }
+
+    # ----------------------------
+    # ATR
+    # ----------------------------
+    def atr(self, period=14):
+
+        high = self.df["High"]
+
+        low = self.df["Low"]
+
+        close = self.df["Close"]
+
+        tr = pd.concat([
+            high - low,
+            abs(high - close.shift()),
+            abs(low - close.shift())
+        ], axis=1).max(axis=1)
+
+        atr = tr.rolling(period).mean()
+
+        return round(float(atr.iloc[-1]), 2)
+
+    # ----------------------------
+    # ADX
+    # ----------------------------
+    def adx(self, period=14):
+
+        high = self.df["High"]
+
+        low = self.df["Low"]
+
+        close = self.df["Close"]
+
+        plus_dm = high.diff()
+
+        minus_dm = low.diff().abs()
+
+        tr = pd.concat([
+            high - low,
+            abs(high - close.shift()),
+            abs(low - close.shift())
+        ], axis=1).max(axis=1)
+
+        atr = tr.rolling(period).mean()
+
+        plus_di = 100 * (
+            plus_dm.rolling(period).mean() / atr
+        )
+
+        minus_di = 100 * (
+            minus_dm.rolling(period).mean() / atr
+        )
+
+        dx = (
+            abs(plus_di - minus_di)
+            /
+            (plus_di + minus_di)
+        ) * 100
+
+        adx = dx.rolling(period).mean()
+
+        return round(float(adx.iloc[-1]), 2)
+
+    # ----------------------------
+    # Support
+    # ----------------------------
+    def support(self):
+
+        return round(
+            float(
+                self.df["Low"]
+                .tail(20)
+                .min()
+            ),
+            2
+        )
+
+    # ----------------------------
+    # Resistance
+    # ----------------------------
+    def resistance(self):
+
+        return round(
+            float(
+                self.df["High"]
+                .tail(20)
+                .max()
+            ),
+            2
+        )
+
+    # ----------------------------
+    # Overall Score
+    # ----------------------------
+    def score(self):
+
+        score = 0
+
+        rsi = self.calculate_rsi()
+
+        ema20 = self.ema(20)
+
+        ema50 = self.ema(50)
+
+        price = float(self.df["Close"].iloc[-1])
+
+        if price > ema20:
+            score += 1
+
+        if ema20 > ema50:
+            score += 1
+
+        if 50 <= rsi <= 70:
+            score += 1
+
+        if score == 3:
+            return "Strong Buy"
+
+        elif score == 2:
+            return "Buy"
+
+        elif score == 1:
+            return "Neutral"
+
+        return "Sell"
+
+    # ----------------------------
+    # Final Output
+    # ----------------------------
     def calculate(self):
 
-        df = self.df
-
-        if len(df) < 200:
-            raise Exception("Not enough historical data")
-
-        # EMA
-        df["EMA20"] = EMAIndicator(df["Close"], window=20).ema_indicator()
-        df["EMA50"] = EMAIndicator(df["Close"], window=50).ema_indicator()
-        df["EMA200"] = EMAIndicator(df["Close"], window=200).ema_indicator()
-
-        # SMA
-        df["SMA200"] = SMAIndicator(df["Close"], window=200).sma_indicator()
-
-        # RSI
-        df["RSI"] = RSIIndicator(df["Close"]).rsi()
-
-        # MACD
-        macd = MACD(df["Close"])
-
-        df["MACD"] = macd.macd()
-        df["MACD_SIGNAL"] = macd.macd_signal()
-        df["MACD_DIFF"] = macd.macd_diff()
-
-        # ADX
-        adx = ADXIndicator(df["High"], df["Low"], df["Close"])
-
-        df["ADX"] = adx.adx()
-
-        # ATR
-        atr = AverageTrueRange(
-            df["High"],
-            df["Low"],
-            df["Close"]
-        )
-
-        df["ATR"] = atr.average_true_range()
-
-        # Bollinger Bands
-        bb = BollingerBands(df["Close"])
-
-        df["BB_HIGH"] = bb.bollinger_hband()
-        df["BB_LOW"] = bb.bollinger_lband()
-
-        # VWAP
-        vwap = VolumeWeightedAveragePrice(
-            df["High"],
-            df["Low"],
-            df["Close"],
-            df["Volume"]
-        )
-
-        df["VWAP"] = vwap.volume_weighted_average_price()
-
-        latest = df.iloc[-1]
+        macd = self.macd()
 
         return {
 
-            "price": round(float(latest["Close"]),2),
+            "price": round(
+                float(self.df["Close"].iloc[-1]),
+                2
+            ),
 
-            "ema20": round(float(latest["EMA20"]),2),
+            "rsi": self.calculate_rsi(),
 
-            "ema50": round(float(latest["EMA50"]),2),
+            "ema20": self.ema(20),
 
-            "ema200": round(float(latest["EMA200"]),2),
+            "ema50": self.ema(50),
 
-            "sma200": round(float(latest["SMA200"]),2),
+            "ema200": self.ema(200),
 
-            "rsi": round(float(latest["RSI"]),2),
+            "macd": macd["macd"],
 
-            "macd": round(float(latest["MACD"]),2),
+            "signal": macd["signal"],
 
-            "macd_signal": round(float(latest["MACD_SIGNAL"]),2),
+            "histogram": macd["histogram"],
 
-            "macd_histogram": round(float(latest["MACD_DIFF"]),2),
+            "atr": self.atr(),
 
-            "adx": round(float(latest["ADX"]),2),
+            "adx": self.adx(),
 
-            "atr": round(float(latest["ATR"]),2),
+            "support": self.support(),
 
-            "vwap": round(float(latest["VWAP"]),2),
+            "resistance": self.resistance(),
 
-            "bb_upper": round(float(latest["BB_HIGH"]),2),
-
-            "bb_lower": round(float(latest["BB_LOW"]),2),
-
-            "support": round(float(df["Low"].tail(20).min()),2),
-
-            "resistance": round(float(df["High"].tail(20).max()),2)
+            "recommendation": self.score()
         }
