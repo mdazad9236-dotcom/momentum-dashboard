@@ -78,8 +78,8 @@ def background_memory_optimized_scanner():
                         "price": price,
                         "target": target,
                         "gain": f"+{gain}%",
-                        "rsi": 66.2,
-                        "macd": "Bullish Crossover",
+                        "rsi": 66,
+                        "macd": "Bullish",
                         "strategy": "3M Breakout Potential"
                     })
             except Exception:
