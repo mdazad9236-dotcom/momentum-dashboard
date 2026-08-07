@@ -11,7 +11,7 @@ def home():
         "message": "Stock Analysis App is live"
     })
 from config import APP_NAME
-from stock_service import get_stock_data
+from stock_service import actual_function_name
 from analysis import analyze_stock
 
 
