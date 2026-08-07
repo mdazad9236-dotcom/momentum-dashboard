@@ -1,5 +1,5 @@
 # app.py
-
+from flask import Flask
 from config import APP_NAME
 from stock_service import get_stock_data
 from analysis import analyze_stock
@@ -318,3 +318,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+@app.route("/")
+def home():
+    return "Stock Analysis App Running"
