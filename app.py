@@ -1,5 +1,15 @@
 # app.py
-from flask import Flask
+from flask import Flask, jsonify
+
+app = Flask(__name__)
+
+
+@app.route("/")
+def home():
+    return jsonify({
+        "status": "running",
+        "message": "Stock Analysis App is live"
+    })
 from config import APP_NAME
 from stock_service import get_stock_data
 from analysis import analyze_stock
