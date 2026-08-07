@@ -118,24 +118,21 @@ def manifest():
         "icons": [{"src": "https://cdn-icons-png.flaticon.com/512/2422/2422796.png", "sizes": "512x512", "type": "image/png"}]
     })
 
-@app.get("/login", response_class=HTMLResponse)
-def login_page():
-    return """
-    <!DOCTYPE html>
-    <html lang="en" class="dark">
-    <head><meta charset="UTF-8"><title>Login - Stock Terminal</title><script src="https://cdn.tailwindcss.com"></script></head>
-    <body class="bg-black text-gray-100 flex items-center justify-center h-screen font-sans">
-        <div class="bg-gray-900 p-8 rounded-xl border border-gray-800 shadow-2xl w-96">
-            <h1 class="text-xl font-bold text-center mb-6 text-emerald-400">Stock Terminal Pro</h1>
-            <form action="/login" method="POST" class="space-y-4">
-                <div><label class="text-xs text-gray-400 font-semibold">USER NAME</label><input type="text" name="username" required placeholder="Admin" class="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm focus:outline-none focus:border-emerald-500"></div>
-                <div><label class="text-xs text-gray-400 font-semibold">PASSWORD</label><input type="password" name="password" required placeholder="Admin" class="w-full bg-black border border-gray-800 rounded p-2 text-white text-sm focus:outline-none focus:border-emerald-500"></div>
-                <button type="submit" class="w-full bg-emerald-500 font-bold py-2 rounded text-black text-sm hover:bg-emerald-400 transition">LOGIN</button>
-            </form>
-        </div>
-    </body>
-    </html>
-    """
+{
+  "success": true,
+  "symbol": "SBIN",
+  "company": "State Bank of India",
+  "analysis": {
+    "price": 812.45,
+    "rsi": 61.7,
+    "ema20": 805.2,
+    "ema50": 793.8,
+    "macd": 4.21,
+    "adx": 28.5,
+    "support": 790.3,
+    "resistance": 821.6
+  }
+}
 
 @app.post("/login")
 def login(username: str = Form(...), password: str = Form(...)):
