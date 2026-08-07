@@ -1,116 +1,111 @@
 import pandas as pd
-import numpy as np
+
+from ta.trend import EMAIndicator
+from ta.trend import SMAIndicator
+from ta.trend import MACD
+from ta.trend import ADXIndicator
+
+from ta.momentum import RSIIndicator
+
+from ta.volatility import BollingerBands
+from ta.volatility import AverageTrueRange
+
+from ta.volume import VolumeWeightedAveragePrice
 
 
 class TechnicalAnalyzer:
 
-    def __init__(self, dataframe):
-        self.df = dataframe.copy()
+    def __init__(self, df: pd.DataFrame):
+        self.df = df.copy()
 
-    # -----------------------------
-    # EMA
-    # -----------------------------
-    def ema(self, period):
-        return self.df["Close"].ewm(span=period, adjust=False).mean()
+    def calculate(self):
 
-    # -----------------------------
-    # SMA
-    # -----------------------------
-    def sma(self, period):
-        return self.df["Close"].rolling(period).mean()
+        df = self.df
 
-    # -----------------------------
-    # RSI
-    # -----------------------------
-    def rsi(self, period=14):
+        if len(df) < 200:
+            raise Exception("Not enough historical data")
 
-        delta = self.df["Close"].diff()
+        # EMA
+        df["EMA20"] = EMAIndicator(df["Close"], window=20).ema_indicator()
+        df["EMA50"] = EMAIndicator(df["Close"], window=50).ema_indicator()
+        df["EMA200"] = EMAIndicator(df["Close"], window=200).ema_indicator()
 
-        gain = delta.clip(lower=0)
+        # SMA
+        df["SMA200"] = SMAIndicator(df["Close"], window=200).sma_indicator()
 
-        loss = -delta.clip(upper=0)
+        # RSI
+        df["RSI"] = RSIIndicator(df["Close"]).rsi()
 
-        avg_gain = gain.rolling(period).mean()
+        # MACD
+        macd = MACD(df["Close"])
 
-        avg_loss = loss.rolling(period).mean()
+        df["MACD"] = macd.macd()
+        df["MACD_SIGNAL"] = macd.macd_signal()
+        df["MACD_DIFF"] = macd.macd_diff()
 
-        rs = avg_gain / avg_loss
+        # ADX
+        adx = ADXIndicator(df["High"], df["Low"], df["Close"])
 
-        rsi = 100 - (100 / (1 + rs))
+        df["ADX"] = adx.adx()
 
-        return rsi
+        # ATR
+        atr = AverageTrueRange(
+            df["High"],
+            df["Low"],
+            df["Close"]
+        )
 
-    # -----------------------------
-    # MACD
-    # -----------------------------
-    def macd(self):
+        df["ATR"] = atr.average_true_range()
 
-        ema12 = self.ema(12)
+        # Bollinger Bands
+        bb = BollingerBands(df["Close"])
 
-        ema26 = self.ema(26)
+        df["BB_HIGH"] = bb.bollinger_hband()
+        df["BB_LOW"] = bb.bollinger_lband()
 
-        macd = ema12 - ema26
+        # VWAP
+        vwap = VolumeWeightedAveragePrice(
+            df["High"],
+            df["Low"],
+            df["Close"],
+            df["Volume"]
+        )
 
-        signal = macd.ewm(span=9, adjust=False).mean()
+        df["VWAP"] = vwap.volume_weighted_average_price()
 
-        histogram = macd - signal
+        latest = df.iloc[-1]
 
-        return macd, signal, histogram
+        return {
 
-    # -----------------------------
-    # Volume Average
-    # -----------------------------
-    def average_volume(self):
+            "price": round(float(latest["Close"]),2),
 
-        return self.df["Volume"].rolling(20).mean()
+            "ema20": round(float(latest["EMA20"]),2),
 
-    # -----------------------------
-    # Support
-    # -----------------------------
-    def support(self):
+            "ema50": round(float(latest["EMA50"]),2),
 
-        return float(self.df["Low"].tail(20).min())
+            "ema200": round(float(latest["EMA200"]),2),
 
-    # -----------------------------
-    # Resistance
-    # -----------------------------
-    def resistance(self):
+            "sma200": round(float(latest["SMA200"]),2),
 
-        return float(self.df["High"].tail(20).max())
+            "rsi": round(float(latest["RSI"]),2),
 
-    # -----------------------------
-    # Complete Analysis
-    # -----------------------------
-    def analyze(self):
+            "macd": round(float(latest["MACD"]),2),
 
-        macd, signal, hist = self.macd()
+            "macd_signal": round(float(latest["MACD_SIGNAL"]),2),
 
-        result = {
+            "macd_histogram": round(float(latest["MACD_DIFF"]),2),
 
-            "price": round(float(self.df["Close"].iloc[-1]),2),
+            "adx": round(float(latest["ADX"]),2),
 
-            "ema20": round(float(self.ema(20).iloc[-1]),2),
+            "atr": round(float(latest["ATR"]),2),
 
-            "ema50": round(float(self.ema(50).iloc[-1]),2),
+            "vwap": round(float(latest["VWAP"]),2),
 
-            "ema200": round(float(self.ema(200).iloc[-1]),2),
+            "bb_upper": round(float(latest["BB_HIGH"]),2),
 
-            "sma200": round(float(self.sma(200).iloc[-1]),2),
+            "bb_lower": round(float(latest["BB_LOW"]),2),
 
-            "rsi": round(float(self.rsi().iloc[-1]),2),
+            "support": round(float(df["Low"].tail(20).min()),2),
 
-            "macd": round(float(macd.iloc[-1]),2),
-
-            "signal": round(float(signal.iloc[-1]),2),
-
-            "histogram": round(float(hist.iloc[-1]),2),
-
-            "support": self.support(),
-
-            "resistance": self.resistance(),
-
-            "avg_volume": int(self.average_volume().iloc[-1])
-
+            "resistance": round(float(df["High"].tail(20).max()),2)
         }
-
-        return result
