@@ -1,13 +1,13 @@
 # app.py
 from flask import Flask, jsonify, render_template
+from config import APP_NAME
+from stock_service import get_stock_data, StockService
+from analysis import analyze_stock
 
 @app.route("/")
 def home():
     return render_template("index.html")\
     
-from config import APP_NAME
-from stock_service import get_stock_data, StockService
-from analysis import analyze_stock
 
 app = Flask(__name__)
 service = StockService()
@@ -101,10 +101,4 @@ def run_cli_application():
 
 
 if __name__ == "__main__":
-    import sys
-    # If run with '--cli', starts the interactive terminal mode
-    if len(sys.argv) > 1 and sys.argv[1] == "--cli":
-        run_cli_application()
-    else:
-        # Defaults to running the Flask API server
-        app.run(host="0.0.0.0", port=5000, debug=True)
+   app.run(host="0.0.0.0", port=5000, debug=True)
