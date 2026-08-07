@@ -1,25 +1,116 @@
 import os
 
-# Application
-APP_NAME = "Momentum Dashboard"
-VERSION = "2.0.0"
+# ==========================
+# Application Configuration
+# ==========================
 
-# Admin Login
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
+APP_NAME = "Momentum Dashboard Pro"
+APP_VERSION = "1.0.0"
 
-# Security
-SECRET_KEY = os.getenv(
-    "SECRET_KEY",
-    "CHANGE_THIS_TO_A_RANDOM_SECRET_KEY"
-)
+# ==========================
+# Login Credentials
+# ==========================
 
-# Stock Settings
+ADMIN_USERNAME = "Admin"
+ADMIN_PASSWORD = "Admin"
+
+SECRET_KEY = "momentum-dashboard-super-secret-key"
+
+# ==========================
+# Yahoo Finance
+# ==========================
+
 DEFAULT_PERIOD = "1y"
 DEFAULT_INTERVAL = "1d"
 
-# Dashboard
-REFRESH_SECONDS = 30
+# ==========================
+# Scanner Settings
+# ==========================
 
-# AI
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+MIN_PRICE = 2
+
+MAX_PRICE = 300
+
+BREAKOUT_TARGET_PERCENT = 16
+
+# ==========================
+# Technical Indicator Periods
+# ==========================
+
+EMA_FAST = 20
+EMA_SLOW = 50
+EMA_LONG = 200
+
+RSI_PERIOD = 14
+
+ADX_PERIOD = 14
+
+ATR_PERIOD = 14
+
+MACD_FAST = 12
+MACD_SLOW = 26
+MACD_SIGNAL = 9
+
+# ==========================
+# Watchlist
+# ==========================
+
+DEFAULT_WATCHLIST = [
+    "SBIN",
+    "SUZLON",
+    "IDEA",
+    "YESBANK",
+    "TCS",
+    "INFY",
+    "IRCTC",
+    "BEL",
+    "CGPOWER",
+    "TATASTEEL"
+]
+
+# ==========================
+# Scanner Universe
+# ==========================
+
+SCAN_STOCKS = [
+    "SBIN",
+    "HDFCBANK",
+    "ICICIBANK",
+    "AXISBANK",
+    "KOTAKBANK",
+    "TCS",
+    "INFY",
+    "HCLTECH",
+    "TECHM",
+    "WIPRO",
+    "BEL",
+    "BHEL",
+    "CGPOWER",
+    "SUZLON",
+    "IDEA",
+    "YESBANK",
+    "JPPOWER",
+    "RPOWER",
+    "IRB",
+    "NBCC",
+    "NCC",
+    "KEC",
+    "RECLTD",
+    "IRCTC",
+    "POWERGRID",
+    "NTPC",
+    "ONGC",
+    "TATASTEEL",
+    "TATAMOTORS",
+    "ASHOKLEY",
+    "M&M",
+    "MARUTI",
+    "JINDALSTEL",
+    "HINDCOPPER",
+    "GRANULES",
+    "DEEPAKNTR",
+    "LEMONTREE",
+    "MSUMI",
+    "SAGILITY",
+    "OLAELEC",
+]
