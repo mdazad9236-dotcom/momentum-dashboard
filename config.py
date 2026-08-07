@@ -28,9 +28,7 @@ DEFAULT_INTERVAL = "1d"
 # ==========================
 
 MIN_PRICE = 2
-
 MAX_PRICE = 300
-
 BREAKOUT_TARGET_PERCENT = 16
 
 # ==========================
@@ -42,9 +40,7 @@ EMA_SLOW = 50
 EMA_LONG = 200
 
 RSI_PERIOD = 14
-
 ADX_PERIOD = 14
-
 ATR_PERIOD = 14
 
 MACD_FAST = 12
@@ -73,44 +69,10 @@ DEFAULT_WATCHLIST = [
 # ==========================
 
 SCAN_STOCKS = [
-    "SBIN",
-    "HDFCBANK",
-    "ICICIBANK",
-    "AXISBANK",
-    "KOTAKBANK",
-    "TCS",
-    "INFY",
-    "HCLTECH",
-    "TECHM",
-    "WIPRO",
-    "BEL",
-    "BHEL",
-    "CGPOWER",
-    "SUZLON",
-    "IDEA",
-    "YESBANK",
-    "JPPOWER",
-    "RPOWER",
-    "IRB",
-    "NBCC",
-    "NCC",
-    "KEC",
-    "RECLTD",
-    "IRCTC",
-    "POWERGRID",
-    "NTPC",
-    "ONGC",
-    "TATASTEEL",
-    "TATAMOTORS",
-    "ASHOKLEY",
-    "M&M",
-    "MARUTI",
-    "JINDALSTEL",
-    "HINDCOPPER",
-    "GRANULES",
-    "DEEPAKNTR",
-    "LEMONTREE",
-    "MSUMI",
-    "SAGILITY",
-    "OLAELEC",
+    "SBIN", "HDFCBANK", "ICICIBANK", "AXISBANK", "KOTAKBANK", "TCS", "INFY",
+    "HCLTECH", "TECHM", "WIPRO", "BEL", "BHEL", "CGPOWER", "SUZLON", "IDEA",
+    "YESBANK", "JPPOWER", "RPOWER", "IRB", "NBCC", "NCC", "KEC", "RECLTD",
+    "IRCTC", "POWERGRID", "NTPC", "ONGC", "TATASTEEL", "TATAMOTORS",
+    "ASHOKLEY", "M&M", "MARUTI", "JINDALSTEL", "HINDCOPPER", "GRANULES",
+    "DEEPAKNTR", "LEMONTREE", "MSUMI", "SAGILITY", "OLAELEC"
 ]
