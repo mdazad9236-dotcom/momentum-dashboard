@@ -4,7 +4,28 @@ from config import APP_NAME
 from stock_service import get_stock_data
 from analysis import analyze_stock
 
+from flask import Flask, jsonify, render_template
+from stock_service import StockService
 
+app = Flask(__name__)
+service = StockService()
+
+
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+
+@app.route("/api/analyze/<symbol>", methods=["GET"])
+def analyze_endpoint(symbol):
+    res = service.get_stock_analysis(symbol)
+    if res.get("success"):
+        return jsonify({"status": "success", "data": res})
+    return jsonify({"status": "failed", "message": res.get("message", "Error fetching stock")}), 400
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
 def main():
     print("=" * 50)
     print(APP_NAME)
