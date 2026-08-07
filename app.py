@@ -123,7 +123,7 @@ def manifest():
     })
 
 {
-  "success": true,
+  "success": True,
   "symbol": "SBIN",
   "company": "State Bank of India",
   "analysis": {
@@ -345,7 +345,7 @@ def dashboard(request: Request):
                     <div class="bg-gray-800 p-2 rounded self-start">Ask me about any stock prediction or targets!</div>
                 </div>
                 <div class="p-2 border-t border-gray-800 flex gap-2">
-                    <input id="chat-input" type="text" placeholder="e.g. SUZLON target..." class="bg-black border border-gray-800 rounded px-2 py-1 flex-1 text-white text-xs focus:outline-none" onkeypress="if(event.key==='Enter') sendChatMessage()">
+                    <input id="chat-input" type="text" placeholder="e.g. SUZLON target..." class="bg-black border border-gray-800 rounded px-2 py-1 flex-1 text-white text-xs focus:outline-None" onkeypress="if(event.key==='Enter') sendChatMessage()">
                     <button onclick="sendChatMessage()" class="bg-emerald-600 px-3 py-1 rounded text-black font-bold">Send</button>
                 </div>
             </div>
@@ -366,7 +366,7 @@ def dashboard(request: Request):
                 document.getElementById('chart-modal').classList.remove('hidden');
                 document.getElementById('tradingview-modal-container').innerHTML = '<div id="tv_modal_element" class="h-full w-full"></div>';
                 new TradingView.widget({{
-                    "autosize": true,
+                    "autosize": True,
                     "symbol": tvSymbol,
                     "interval": "D",
                     "timezone": "Asia/Kolkata",
@@ -382,9 +382,9 @@ def dashboard(request: Request):
             }}
 
             // Audio Alert Trigger for RSI > 65
-            let audioEnabled = false;
+            let audioEnabled = False;
             function enableAudio() {{
-                audioEnabled = true;
+                audioEnabled = True;
                 alert("Audio breakout notifications enabled!");
             }}
 
