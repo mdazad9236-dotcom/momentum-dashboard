@@ -11,25 +11,32 @@ class TechnicalAnalyzer:
     # RSI
     # ----------------------------
     def calculate_rsi(self, period=14):
+        if len(self.df) < period + 1:
+            return 50.0
 
         delta = self.df["Close"].diff()
 
-        gain = delta.where(delta > 0, 0)
-        loss = -delta.where(delta < 0, 0)
+        gain = delta.where(delta > 0, 0.0)
+        loss = -delta.where(delta < 0, 0.0)
 
         avg_gain = gain.rolling(period).mean()
         avg_loss = loss.rolling(period).mean()
 
-        rs = avg_gain / avg_loss
+        last_loss = avg_loss.iloc[-1]
+        if last_loss == 0 or pd.isna(last_loss):
+            return 100.0
 
-        rsi = 100 - (100 / (1 + rs))
+        rs = avg_gain.iloc[-1] / last_loss
+        rsi = 100.0 - (100.0 / (1.0 + rs))
 
-        return round(float(rsi.iloc[-1]), 2)
+        return round(float(rsi), 2)
 
     # ----------------------------
     # EMA
     # ----------------------------
     def ema(self, period):
+        if len(self.df) < period:
+            return round(float(self.df["Close"].iloc[-1]), 2)
 
         return round(
             float(
@@ -45,15 +52,14 @@ class TechnicalAnalyzer:
     # MACD
     # ----------------------------
     def macd(self):
+        if len(self.df) < 26:
+            return {"macd": 0.0, "signal": 0.0, "histogram": 0.0}
 
-        ema12 = self.df["Close"].ewm(span=12).mean()
-
-        ema26 = self.df["Close"].ewm(span=26).mean()
+        ema12 = self.df["Close"].ewm(span=12, adjust=False).mean()
+        ema26 = self.df["Close"].ewm(span=26, adjust=False).mean()
 
         macd = ema12 - ema26
-
-        signal = macd.ewm(span=9).mean()
-
+        signal = macd.ewm(span=9, adjust=False).mean()
         histogram = macd - signal
 
         return {
@@ -66,11 +72,11 @@ class TechnicalAnalyzer:
     # ATR
     # ----------------------------
     def atr(self, period=14):
+        if len(self.df) < period + 1:
+            return 0.0
 
         high = self.df["High"]
-
         low = self.df["Low"]
-
         close = self.df["Close"]
 
         tr = pd.concat([
@@ -87,15 +93,14 @@ class TechnicalAnalyzer:
     # ADX
     # ----------------------------
     def adx(self, period=14):
+        if len(self.df) < period + 1:
+            return 25.0
 
         high = self.df["High"]
-
         low = self.df["Low"]
-
         close = self.df["Close"]
 
         plus_dm = high.diff()
-
         minus_dm = low.diff().abs()
 
         tr = pd.concat([
@@ -106,35 +111,31 @@ class TechnicalAnalyzer:
 
         atr = tr.rolling(period).mean()
 
-        plus_di = 100 * (
-            plus_dm.rolling(period).mean() / atr
-        )
+        atr_val = atr.iloc[-1]
+        if atr_val == 0 or pd.isna(atr_val):
+            return 25.0
 
-        minus_di = 100 * (
-            minus_dm.rolling(period).mean() / atr
-        )
+        plus_di = 100 * (plus_dm.rolling(period).mean() / atr)
+        minus_di = 100 * (minus_dm.rolling(period).mean() / atr)
 
-        dx = (
-            abs(plus_di - minus_di)
-            /
-            (plus_di + minus_di)
-        ) * 100
+        denom = plus_di + minus_di
+        denom_val = denom.iloc[-1]
 
+        if denom_val == 0 or pd.isna(denom_val):
+            return 25.0
+
+        dx = (abs(plus_di - minus_di) / denom) * 100
         adx = dx.rolling(period).mean()
 
-        return round(float(adx.iloc[-1]), 2)
+        res = adx.iloc[-1]
+        return round(float(res), 2) if not pd.isna(res) else 25.0
 
     # ----------------------------
     # Support
     # ----------------------------
     def support(self):
-
         return round(
-            float(
-                self.df["Low"]
-                .tail(20)
-                .min()
-            ),
+            float(self.df["Low"].tail(20).min()),
             2
         )
 
@@ -142,13 +143,8 @@ class TechnicalAnalyzer:
     # Resistance
     # ----------------------------
     def resistance(self):
-
         return round(
-            float(
-                self.df["High"]
-                .tail(20)
-                .max()
-            ),
+            float(self.df["High"].tail(20).max()),
             2
         )
 
@@ -156,15 +152,10 @@ class TechnicalAnalyzer:
     # Overall Score
     # ----------------------------
     def score(self):
-
         score = 0
-
         rsi = self.calculate_rsi()
-
         ema20 = self.ema(20)
-
         ema50 = self.ema(50)
-
         price = float(self.df["Close"].iloc[-1])
 
         if price > ema20:
@@ -178,10 +169,8 @@ class TechnicalAnalyzer:
 
         if score == 3:
             return "Strong Buy"
-
         elif score == 2:
             return "Buy"
-
         elif score == 1:
             return "Neutral"
 
@@ -191,37 +180,26 @@ class TechnicalAnalyzer:
     # Final Output
     # ----------------------------
     def calculate(self):
-
         macd = self.macd()
 
         return {
-
-            "price": round(
-                float(self.df["Close"].iloc[-1]),
-                2
-            ),
-
+            "price": round(float(self.df["Close"].iloc[-1]), 2),
             "rsi": self.calculate_rsi(),
-
             "ema20": self.ema(20),
-
             "ema50": self.ema(50),
-
             "ema200": self.ema(200),
-
             "macd": macd["macd"],
-
             "signal": macd["signal"],
-
             "histogram": macd["histogram"],
-
             "atr": self.atr(),
-
             "adx": self.adx(),
-
             "support": self.support(),
-
             "resistance": self.resistance(),
-
             "recommendation": self.score()
         }
+
+
+def analyze_stock(history: pd.DataFrame):
+    """ Helper function for direct script calls """
+    analyzer = TechnicalAnalyzer(history)
+    return analyzer.calculate()
