@@ -7,7 +7,7 @@ import pandas as pd
 import yfinance as yf
 
 from stock_service import StockService
-from config import
+from config import *
 from fastapi import FastAPI, Request, Form, status
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from itsdangerous import URLSafeTimedSerializer, BadSignature
