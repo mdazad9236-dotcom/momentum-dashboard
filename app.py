@@ -437,3 +437,24 @@ async def ai_chat(request: Request):
         reply = "⚡ Stock found in database. Trend analysis shows positive momentum across RSI & MACD filters."
 
     return JSONResponse({"reply": reply})
+    @app.get("/api/stock/{symbol}")
+async def get_stock(symbol: str):
+    try:
+        result = stock_service.get_stock_analysis(symbol)
+
+        if not result.get("success"):
+            return JSONResponse(
+                status_code=404,
+                content=result
+            )
+
+        return JSONResponse(content=result)
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": str(e)
+            }
+        )
