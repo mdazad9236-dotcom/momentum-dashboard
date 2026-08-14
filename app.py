@@ -76,3 +76,34 @@ def market_test():
         "status": "success",
         "message": "Angel One market-data service connected."
     })
+@app.route("/api/ltp-test", methods=["GET"])
+def ltp_test():
+
+    service = AngelOneService()
+
+    result = service.get_market_data_service()
+
+    if not result.get("success"):
+        return jsonify({
+            "status": "failed",
+            "message": result.get("message")
+        }), 400
+
+    market = result["service"]
+
+    data = market.get_ltp(
+        exchange="NSE",
+        tradingsymbol="RELIANCE-EQ",
+        symboltoken="2885"
+    )
+
+    if not data.get("success"):
+        return jsonify({
+            "status": "failed",
+            "message": data.get("message")
+        }), 400
+
+    return jsonify({
+        "status": "success",
+        "data": data
+    })
