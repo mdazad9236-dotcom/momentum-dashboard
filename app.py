@@ -47,7 +47,7 @@ def scan():
         # Start with only 5 stocks.
         # We will increase this after the endpoint is stable.
         result = scanner.scan_market(
-            limit=5
+            limit=50
         )
 
         if not result:
