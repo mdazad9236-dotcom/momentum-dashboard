@@ -93,3 +93,24 @@ class AngelOneService:
                 "success": False,
                 "message": str(error)
             }
+    def get_market_data_service(self):
+        from angel_market import AngelMarketData
+
+        if self.smart_api is None:
+            login_result = self.login()
+
+            if not login_result.get("success"):
+                return {
+                    "success": False,
+                    "message": login_result.get(
+                        "message",
+                        "Angel One login failed."
+                    )
+                }
+
+        market = AngelMarketData(self.smart_api)
+
+        return {
+            "success": True,
+            "service": market
+        }
