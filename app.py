@@ -44,19 +44,19 @@ def scan():
             delay=0.5
         )
 
-        # Start with only 5 stocks.
-        # We will increase this after the endpoint is stable.
         result = scanner.scan_market(
-            limit=50
+            limit=5
         )
 
-        if not result:
+        return jsonify(result)
 
-            return jsonify({
-                "success": False,
-                "message": "Scanner returned no result.",
-                "stocks": []
-            }), 500
+    except Exception as error:
+
+        return jsonify({
+            "success": False,
+            "message": str(error),
+            "stocks": []
+        }), 500
 
         if not result.get("success"):
 
