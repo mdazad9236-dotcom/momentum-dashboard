@@ -59,3 +59,20 @@ def angel_test():
         "status": "failed",
         "message": result.get("message")
     }), 400
+@app.route("/api/market-test", methods=["GET"])
+def market_test():
+
+    service = AngelOneService()
+
+    result = service.get_market_data_service()
+
+    if not result.get("success"):
+        return jsonify({
+            "status": "failed",
+            "message": result.get("message")
+        }), 400
+
+    return jsonify({
+        "status": "success",
+        "message": "Angel One market-data service connected."
+    })
