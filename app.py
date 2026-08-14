@@ -1,7 +1,7 @@
 from flask import Flask, jsonify, render_template
 from angel_service import AngelOneService
 from stock_service import StockService
-
+from angel_scanner import AngelScanner
 
 app = Flask(__name__)
 
@@ -106,4 +106,23 @@ def ltp_test():
     return jsonify({
         "status": "success",
         "data": data
+    })
+@app.route("/api/scan-test", methods=["GET"])
+def scan_test():
+
+    scanner = AngelScanner()
+
+    result = scanner.scan_market()
+
+    if not result.get("success"):
+
+        return jsonify({
+            "status": "failed",
+            "message": result.get("message")
+        }), 400
+
+    return jsonify({
+        "status": "success",
+        "count": result.get("count"),
+        "stocks": result.get("stocks")
     })
