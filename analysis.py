@@ -1,4 +1,3 @@
-```python
 """
 X10 THINK
 Stage 1 - Technical Analysis Engine
@@ -677,6 +676,5 @@ def analyze_stock(history: pd.DataFrame):
     """
 
     analyzer = TechnicalAnalyzer(history)
-
     return analyzer.calculate()
 ```
