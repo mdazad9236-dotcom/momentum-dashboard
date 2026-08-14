@@ -1,19 +1,3 @@
-"""
-X10 THINK
-Stage 1 - Technical Analysis Engine
-
-This module is responsible ONLY for technical market analysis.
-
-It does NOT:
-- predict guaranteed returns
-- generate investment advice
-- perform fundamental analysis
-- perform backtesting
-- calculate probability
-
-Those modules will be added separately.
-"""
-
 import pandas as pd
 import numpy as np
 
@@ -677,4 +661,3 @@ def analyze_stock(history: pd.DataFrame):
 
     analyzer = TechnicalAnalyzer(history)
     return analyzer.calculate()
-```
