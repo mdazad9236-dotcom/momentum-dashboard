@@ -1,11 +1,12 @@
 from flask import Flask, jsonify, render_template
 from angel_service import AngelOneService
 from stock_service import StockService
+@app.route("/api/analyze/<symbol>", methods=["GET"])
 from angel_scanner import AngelScanner
 
 app = Flask(__name__)
 
-service = StockService()
+angel_service = AngelOneService()
 
 
 @app.route("/")
@@ -126,3 +127,52 @@ def scan_test():
         "count": result.get("count"),
         "stocks": result.get("stocks")
     })
+@app.route("/api/historical/<symbol>", methods=["GET"])
+def historical_endpoint(symbol):
+    try:
+        token_map = {
+            "RELIANCE-EQ": "2885",
+            "TCS-EQ": "11536",
+            "INFY-EQ": "1594",
+            "HDFCBANK-EQ": "1333",
+            "ICICIBANK-EQ": "4963",
+            "SBIN-EQ": "3045",
+            "BHARTIARTL-EQ": "10604",
+            "ITC-EQ": "1660",
+            "LT-EQ": "11483",
+            "AXISBANK-EQ": "5900",
+            "KOTAKBANK-EQ": "1922",
+            "TATASTEEL-EQ": "3499",
+            "TATAMOTORS-EQ": "3456",
+            "MARUTI-EQ": "10999",
+            "SUNPHARMA-EQ": "3351",
+            "HINDALCO-EQ": "1363",
+            "NTPC-EQ": "11630",
+            "POWERGRID-EQ": "14977",
+            "ONGC-EQ": "2475",
+            "COALINDIA-EQ": "20374"
+        }
+
+        symbol = symbol.upper()
+
+        if symbol not in token_map:
+            return jsonify({
+                "success": False,
+                "message": "Stock symbol not found in scanner list."
+            }), 404
+
+        result = angel_service.get_historical_data(
+            symbol=symbol,
+            token=token_map[symbol],
+            days=200,
+            interval="ONE_DAY",
+            exchange="NSE"
+        )
+
+        return jsonify(result)
+
+    except Exception as error:
+        return jsonify({
+            "success": False,
+            "message": str(error)
+        }), 500
