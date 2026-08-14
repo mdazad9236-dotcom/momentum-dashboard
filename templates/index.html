@@ -4,48 +4,198 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Stock Analysis Dashboard</title>
+    <title>Market AI Dashboard</title>
 
     <style>
         * {
             box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
         body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            background: #f4f6f8;
-            color: #222;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f3f6fa;
+            color: #172033;
         }
 
-        .header {
-            background: #111827;
+        /* =========================
+           HEADER
+        ========================== */
+
+        header {
+            background: #101827;
             color: white;
-            padding: 20px;
-            text-align: center;
+            padding: 18px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
 
-        .header h1 {
-            margin: 0;
-            font-size: 28px;
+        .logo {
+            font-size: 23px;
+            font-weight: bold;
         }
 
-        .header p {
-            margin: 8px 0 0;
-            color: #cbd5e1;
+        .logo span {
+            color: #22c55e;
         }
+
+        .market-status {
+            font-size: 13px;
+            color: #22c55e;
+            font-weight: bold;
+        }
+
+        /* =========================
+           MAIN
+        ========================== */
 
         .container {
-            max-width: 1100px;
-            margin: 30px auto;
-            padding: 0 20px;
+            max-width: 1400px;
+            margin: auto;
+            padding: 25px;
+        }
+
+        /* =========================
+           INDEX CARDS
+        ========================== */
+
+        .indices {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .index-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.06);
+        }
+
+        .index-name {
+            color: #667085;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .index-value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .positive {
+            color: #16a34a;
+        }
+
+        .negative {
+            color: #dc2626;
+        }
+
+        /* =========================
+           SECTION
+        ========================== */
+
+        .section {
+            margin-top: 25px;
+        }
+
+        .section-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .section-title h2 {
+            font-size: 21px;
+        }
+
+        .section-title span {
+            color: #667085;
+            font-size: 13px;
+        }
+
+        /* =========================
+           OPPORTUNITY TABLE
+        ========================== */
+
+        .table-container {
+            background: white;
+            border-radius: 12px;
+            overflow-x: auto;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.06);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 750px;
+        }
+
+        th,
+        td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #edf0f4;
+        }
+
+        th {
+            background: #f8fafc;
+            font-size: 13px;
+            color: #667085;
+        }
+
+        td {
+            font-size: 14px;
+        }
+
+        .stock-name {
+            font-weight: bold;
+        }
+
+        .score {
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .score-high {
+            color: #16a34a;
+        }
+
+        .score-medium {
+            color: #ca8a04;
+        }
+
+        .signal {
+            font-weight: bold;
+        }
+
+        .signal-buy {
+            color: #16a34a;
+        }
+
+        .signal-watch {
+            color: #ca8a04;
+        }
+
+        /* =========================
+           SEARCH
+        ========================== */
+
+        .search-panel {
+            background: white;
+            padding: 22px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.06);
         }
 
         .search-box {
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
             display: flex;
             gap: 10px;
         }
@@ -53,9 +203,9 @@
         .search-box input {
             flex: 1;
             padding: 14px;
-            border: 1px solid #d1d5db;
+            border: 1px solid #d0d5dd;
             border-radius: 8px;
-            font-size: 16px;
+            font-size: 15px;
         }
 
         .search-box button {
@@ -64,7 +214,7 @@
             border-radius: 8px;
             background: #2563eb;
             color: white;
-            font-size: 16px;
+            font-weight: bold;
             cursor: pointer;
         }
 
@@ -72,96 +222,143 @@
             background: #1d4ed8;
         }
 
+        /* =========================
+           SCANNER CARDS
+        ========================== */
+
+        .scanner-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+
+        .scanner-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.06);
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .scanner-card:hover {
+            transform: translateY(-3px);
+        }
+
+        .scanner-icon {
+            font-size: 27px;
+            margin-bottom: 10px;
+        }
+
+        .scanner-card h3 {
+            margin-bottom: 6px;
+        }
+
+        .scanner-card p {
+            color: #667085;
+            font-size: 13px;
+        }
+
+        /* =========================
+           ANALYSIS
+        ========================== */
+
+        #analysis-section {
+            display: none;
+        }
+
+        .analysis-header {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.06);
+        }
+
+        .analysis-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .metric {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.06);
+        }
+
+        .metric-label {
+            color: #667085;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-size: 22px;
+            font-weight: bold;
+        }
+
         .loading {
             display: none;
-            margin-top: 20px;
-            text-align: center;
+            margin-top: 15px;
+            color: #2563eb;
             font-weight: bold;
         }
 
         .error {
             display: none;
-            margin-top: 20px;
-            padding: 15px;
+            margin-top: 15px;
             background: #fee2e2;
             color: #991b1b;
+            padding: 15px;
             border-radius: 8px;
         }
 
-        .dashboard {
-            display: none;
-            margin-top: 25px;
-        }
+        /* =========================
+           FOOTER
+        ========================== */
 
-        .stock-header {
-            background: white;
+        footer {
+            margin-top: 50px;
             padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+            text-align: center;
+            color: #667085;
+            font-size: 13px;
         }
 
-        .stock-header h2 {
-            margin: 0;
-        }
+        /* =========================
+           MOBILE
+        ========================== */
 
-        .stock-header p {
-            color: #6b7280;
-            margin: 8px 0;
-        }
+        @media (max-width: 900px) {
 
-        .cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
-        }
+            .indices,
+            .scanner-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
 
-        .card {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
-        }
-
-        .card h3 {
-            margin-top: 0;
-            color: #374151;
-        }
-
-        .card p {
-            margin: 8px 0;
-        }
-
-        .analysis {
-            margin-top: 20px;
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
-        }
-
-        .analysis-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 12px 0;
-            border-bottom: 1px solid #e5e7eb;
-        }
-
-        .analysis-row:last-child {
-            border-bottom: none;
-        }
-
-        .analysis-key {
-            font-weight: bold;
-            color: #374151;
-        }
-
-        .analysis-value {
-            color: #111827;
-            text-align: right;
+            .analysis-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
 
         @media (max-width: 600px) {
+
+            header {
+                padding: 15px;
+            }
+
+            .container {
+                padding: 15px;
+            }
+
+            .indices,
+            .scanner-grid,
+            .analysis-grid {
+                grid-template-columns: 1fr;
+            }
+
             .search-box {
                 flex-direction: column;
             }
@@ -175,193 +372,625 @@
 
 <body>
 
-    <div class="header">
-        <h1>📈 Stock Analysis Dashboard</h1>
-        <p>Technical analysis powered by Python</p>
+<header>
+
+    <div class="logo">
+        📈 Market<span>AI</span>
     </div>
 
-    <div class="container">
+    <div class="market-status">
+        ● SYSTEM ONLINE
+    </div>
 
-        <div class="search-box">
-            <input
-                type="text"
-                id="symbol"
-                placeholder="Enter NSE stock symbol e.g. RELIANCE"
+</header>
+
+
+<div class="container">
+
+
+    <!-- =========================
+         MARKET INDICES
+    ========================== -->
+
+    <div class="indices">
+
+        <div class="index-card">
+
+            <div class="index-name">
+                NIFTY 50
+            </div>
+
+            <div class="index-value">
+                --
+            </div>
+
+            <div class="positive">
+                Market data pending
+            </div>
+
+        </div>
+
+
+        <div class="index-card">
+
+            <div class="index-name">
+                BANK NIFTY
+            </div>
+
+            <div class="index-value">
+                --
+            </div>
+
+            <div class="positive">
+                Market data pending
+            </div>
+
+        </div>
+
+
+        <div class="index-card">
+
+            <div class="index-name">
+                SENSEX
+            </div>
+
+            <div class="index-value">
+                --
+            </div>
+
+            <div class="positive">
+                Market data pending
+            </div>
+
+        </div>
+
+
+        <div class="index-card">
+
+            <div class="index-name">
+                INDIA VIX
+            </div>
+
+            <div class="index-value">
+                --
+            </div>
+
+            <div>
+                Waiting for live data
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- =========================
+         AI OPPORTUNITIES
+    ========================== -->
+
+    <div class="section">
+
+        <div class="section-title">
+
+            <h2>
+                🔥 Top AI Opportunities
+            </h2>
+
+            <span>
+                Auto Analyzer
+            </span>
+
+        </div>
+
+
+        <div class="table-container">
+
+            <table>
+
+                <thead>
+
+                    <tr>
+
+                        <th>Rank</th>
+                        <th>Stock</th>
+                        <th>Price</th>
+                        <th>AI Score</th>
+                        <th>Signal</th>
+                        <th>Trend</th>
+                        <th>Volume</th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody id="opportunity-table">
+
+                    <tr>
+
+                        <td>—</td>
+
+                        <td class="stock-name">
+                            Scanner starting...
+                        </td>
+
+                        <td>—</td>
+
+                        <td class="score">
+                            —
+                        </td>
+
+                        <td>
+                            Waiting
+                        </td>
+
+                        <td>—</td>
+
+                        <td>—</td>
+
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+
+    <!-- =========================
+         STOCK SEARCH
+    ========================== -->
+
+    <div class="section">
+
+        <div class="section-title">
+
+            <h2>
+                🔎 Analyze Stock
+            </h2>
+
+        </div>
+
+
+        <div class="search-panel">
+
+            <div class="search-box">
+
+                <input
+                    id="symbol"
+                    type="text"
+                    placeholder="Enter NSE symbol e.g. RELIANCE"
+                >
+
+                <button onclick="analyzeStock()">
+                    ANALYZE
+                </button>
+
+            </div>
+
+
+            <div
+                id="loading"
+                class="loading"
+            >
+                ⏳ Fetching market data...
+            </div>
+
+
+            <div
+                id="error"
+                class="error"
+            ></div>
+
+        </div>
+
+    </div>
+
+
+    <!-- =========================
+         MARKET SCANNER
+    ========================== -->
+
+    <div class="section">
+
+        <div class="section-title">
+
+            <h2>
+                📊 Market Scanner
+            </h2>
+
+            <span>
+                Automated detection
+            </span>
+
+        </div>
+
+
+        <div class="scanner-grid">
+
+
+            <div
+                class="scanner-card"
+                onclick="scannerMessage('Breakout')"
             >
 
-            <button onclick="analyzeStock()">
-                Analyze Stock
-            </button>
-        </div>
+                <div class="scanner-icon">
+                    🚀
+                </div>
 
-        <div class="loading" id="loading">
-            ⏳ Fetching stock data and calculating analysis...
-        </div>
+                <h3>
+                    Breakouts
+                </h3>
 
-        <div class="error" id="error"></div>
-
-        <div class="dashboard" id="dashboard">
-
-            <div class="stock-header">
-                <h2 id="company"></h2>
                 <p>
-                    Symbol: <strong id="stockSymbol"></strong>
+                    Stocks breaking important resistance levels.
                 </p>
-                <p>
-                    Sector: <span id="sector"></span>
-                </p>
-                <p>
-                    Industry: <span id="industry"></span>
-                </p>
+
             </div>
 
-            <div class="analysis">
 
-                <h2>Technical Analysis</h2>
+            <div
+                class="scanner-card"
+                onclick="scannerMessage('Volume')"
+            >
 
-                <div id="analysisResults"></div>
+                <div class="scanner-icon">
+                    📊
+                </div>
+
+                <h3>
+                    Volume Spike
+                </h3>
+
+                <p>
+                    Stocks showing unusual trading volume.
+                </p>
+
+            </div>
+
+
+            <div
+                class="scanner-card"
+                onclick="scannerMessage('Momentum')"
+            >
+
+                <div class="scanner-icon">
+                    ⚡
+                </div>
+
+                <h3>
+                    Momentum
+                </h3>
+
+                <p>
+                    Stocks showing strong price momentum.
+                </p>
+
+            </div>
+
+
+            <div
+                class="scanner-card"
+                onclick="scannerMessage('Reversal')"
+            >
+
+                <div class="scanner-icon">
+                    🔄
+                </div>
+
+                <h3>
+                    Reversal
+                </h3>
+
+                <p>
+                    Potential trend reversal candidates.
+                </p>
 
             </div>
 
         </div>
 
     </div>
+
+
+    <!-- =========================
+         STOCK ANALYSIS
+    ========================== -->
+
+    <div
+        id="analysis-section"
+        class="section"
+    >
+
+        <div class="section-title">
+
+            <h2>
+                📈 Stock Analysis
+            </h2>
+
+        </div>
+
+
+        <div class="analysis-header">
+
+            <h2 id="company">
+                —
+            </h2>
+
+            <p id="stock-info">
+                —
+            </p>
+
+        </div>
+
+
+        <div
+            id="analysis-grid"
+            class="analysis-grid"
+        ></div>
+
+    </div>
+
+
+</div>
+
+
+<footer>
+
+    MarketAI — Technical analysis and market intelligence platform.
+
+    <br><br>
+
+    ⚠️ Analysis is informational and is not guaranteed investment advice.
+
+</footer>
+
 
 <script>
 
+
+/* =========================
+   STOCK ANALYSIS
+========================= */
+
+
 async function analyzeStock() {
 
-    const input = document.getElementById("symbol");
+    const symbolInput =
+        document.getElementById("symbol");
 
-    const symbol = input.value.trim().toUpperCase();
+    const symbol =
+        symbolInput.value.trim().toUpperCase();
 
-    const loading = document.getElementById("loading");
-    const error = document.getElementById("error");
-    const dashboard = document.getElementById("dashboard");
-    const results = document.getElementById("analysisResults");
+
+    const loading =
+        document.getElementById("loading");
+
+    const error =
+        document.getElementById("error");
+
+
+    const section =
+        document.getElementById("analysis-section");
+
+
+    const grid =
+        document.getElementById("analysis-grid");
+
 
     error.style.display = "none";
-    dashboard.style.display = "none";
-    results.innerHTML = "";
+
+    section.style.display = "none";
+
+    grid.innerHTML = "";
+
 
     if (!symbol) {
 
-        error.textContent = "Please enter a stock symbol.";
+        error.textContent =
+            "Please enter a stock symbol.";
 
         error.style.display = "block";
 
         return;
+
     }
+
 
     loading.style.display = "block";
 
+
     try {
 
-        const response = await fetch(
-            `/api/analyze/${encodeURIComponent(symbol)}`
-        );
+        const response =
+            await fetch(
+                `/api/analyze/${encodeURIComponent(symbol)}`
+            );
 
-        const result = await response.json();
+
+        const result =
+            await response.json();
+
 
         loading.style.display = "none";
 
-        if (!response.ok || result.status !== "success") {
+
+        if (!response.ok ||
+            result.status !== "success") {
 
             error.textContent =
-                result.message || "Unable to analyze this stock.";
+                result.message ||
+                "Unable to fetch stock data.";
 
             error.style.display = "block";
 
             return;
+
         }
 
-        const data = result.data;
 
-        document.getElementById("company").textContent =
-            data.company || data.symbol;
+        const data =
+            result.data;
 
-        document.getElementById("stockSymbol").textContent =
-            data.symbol || symbol;
 
-        document.getElementById("sector").textContent =
-            data.sector || "Unknown";
+        document
+            .getElementById("company")
+            .textContent =
+            data.company ||
+            data.symbol ||
+            symbol;
 
-        document.getElementById("industry").textContent =
-            data.industry || "Unknown";
 
-        const analysis = data.analysis || {};
+        document
+            .getElementById("stock-info")
+            .textContent =
+            `${data.symbol || symbol} • ${
+                data.sector || "Unknown sector"
+            } • ${
+                data.industry || "Unknown industry"
+            }`;
 
-        for (const [key, value] of Object.entries(analysis)) {
 
-            const row = document.createElement("div");
+        const analysis =
+            data.analysis || {};
 
-            row.className = "analysis-row";
 
-            const keyElement = document.createElement("div");
+        Object.entries(analysis)
+            .forEach(([key, value]) => {
 
-            keyElement.className = "analysis-key";
 
-            keyElement.textContent = formatKey(key);
+                const card =
+                    document.createElement("div");
 
-            const valueElement = document.createElement("div");
 
-            valueElement.className = "analysis-value";
+                card.className =
+                    "metric";
 
-            if (typeof value === "object" && value !== null) {
 
-                valueElement.textContent =
-                    JSON.stringify(value);
+                const label =
+                    document.createElement("div");
 
-            } else {
 
-                valueElement.textContent =
-                    value ?? "N/A";
+                label.className =
+                    "metric-label";
 
-            }
 
-            row.appendChild(keyElement);
+                label.textContent =
+                    formatKey(key);
 
-            row.appendChild(valueElement);
 
-            results.appendChild(row);
-        }
+                const valueElement =
+                    document.createElement("div");
 
-        dashboard.style.display = "block";
 
-    } catch (err) {
+                valueElement.className =
+                    "metric-value";
+
+
+                if (
+                    typeof value === "object" &&
+                    value !== null
+                ) {
+
+                    valueElement.textContent =
+                        JSON.stringify(value);
+
+                } else {
+
+                    valueElement.textContent =
+                        value ?? "N/A";
+
+                }
+
+
+                card.appendChild(label);
+
+                card.appendChild(valueElement);
+
+                grid.appendChild(card);
+
+            });
+
+
+        section.style.display =
+            "block";
+
+
+        section.scrollIntoView({
+            behavior: "smooth"
+        });
+
+
+    } catch (errorObject) {
 
         loading.style.display = "none";
 
         error.textContent =
-            "Unable to connect to the stock analysis server.";
+            "Server connection failed.";
 
         error.style.display = "block";
 
-        console.error(err);
+        console.error(errorObject);
+
     }
+
 }
+
+
+/* =========================
+   FORMAT ANALYSIS LABEL
+========================= */
 
 
 function formatKey(key) {
 
     return String(key)
         .replace(/_/g, " ")
-        .replace(/\b\w/g, letter => letter.toUpperCase());
+        .replace(
+            /\b\w/g,
+            letter =>
+                letter.toUpperCase()
+        );
 
 }
 
 
+/* =========================
+   SCANNER PLACEHOLDER
+========================= */
+
+
+function scannerMessage(type) {
+
+    alert(
+        `${type} scanner will be connected to the Auto Analyzer in the next stage.`
+    );
+
+}
+
+
+/* =========================
+   ENTER KEY
+========================= */
+
+
 document
     .getElementById("symbol")
-    .addEventListener("keypress", function(event) {
+    .addEventListener(
+        "keypress",
+        function(event) {
 
-        if (event.key === "Enter") {
+            if (event.key === "Enter") {
 
-            analyzeStock();
+                analyzeStock();
+
+            }
 
         }
+    );
 
-    });
 
 </script>
 
