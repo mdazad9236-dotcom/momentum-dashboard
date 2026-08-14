@@ -30,52 +30,86 @@ def home():
 # ============================================================
 # STOCK ANALYSIS
 # ============================================================
+# ============================================================
+# X10 MARKET SCANNER
+# ============================================================
+
 @app.route("/api/scan", methods=["GET"])
-def scan_market():
+def scan():
 
-    scanner = AngelScanner(
-        batch_size=10,
-        delay=1.0
-    )
+    try:
 
-    result = scanner.scan_market(
-        limit=10
-    )
+        scanner = AngelScanner(
+            batch_size=5,
+            delay=0.5
+        )
 
-    if not result.get("success"):
+        # Start with only 5 stocks.
+        # We will increase this after the endpoint is stable.
+        result = scanner.scan_market(
+            limit=5
+        )
+
+        if not result:
+
+            return jsonify({
+                "success": False,
+                "message": "Scanner returned no result.",
+                "stocks": []
+            }), 500
+
+        if not result.get("success"):
+
+            return jsonify({
+                "success": False,
+                "message": result.get(
+                    "message",
+                    "Angel One scanner failed."
+                ),
+                "stocks": []
+            }), 500
 
         return jsonify({
-            "status": "failed",
-            "message": result.get(
-                "message",
-                "Scanner failed."
+            "success": True,
+
+            "count": result.get(
+                "count",
+                0
+            ),
+
+            "scanned": result.get(
+                "scanned",
+                0
+            ),
+
+            "successful": result.get(
+                "successful",
+                0
+            ),
+
+            "time_seconds": result.get(
+                "time_seconds",
+                0
+            ),
+
+            "stocks": result.get(
+                "stocks",
+                []
             )
-        }), 500
+        })
 
-    return jsonify({
-        "status": "success",
-        "count": result.get(
-            "count",
-            0
-        ),
-        "scanned": result.get(
-            "scanned",
-            0
-        ),
-        "successful": result.get(
-            "successful",
-            0
-        ),
-        "time_seconds": result.get(
-            "time_seconds",
-            0
-        ),
-        "stocks": result.get(
-            "stocks",
-            []
+    except Exception as error:
+
+        print(
+            "X10 SCANNER API ERROR:",
+            error
         )
-    })
 
+        return jsonify({
+            "success": False,
+            "message": str(error),
+            "stocks": []
+        }), 500
 # ============================================================
 # ANGEL ONE LOGIN TEST
 # ============================================================
