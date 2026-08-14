@@ -58,9 +58,21 @@ class AngelScanner:
             )
 
             analysis = analyzer.calculate()
-            x10 = self.x10_engine.analyze(
-    analysis
-)
+            "x10_score": x10["x10_score"],
+
+"signal": x10["signal"],
+
+"entry": x10["entry"],
+
+"stop_loss": x10["stop_loss"],
+
+"target": x10["target"],
+
+"risk": x10["risk"],
+
+"reward": x10["reward"],
+
+"risk_reward": x10["risk_reward"],
 
             technical_score = analysis.get(
                 "technical_score",
