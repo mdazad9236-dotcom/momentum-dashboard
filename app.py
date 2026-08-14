@@ -1,5 +1,7 @@
-from flask import Flask, jsonify, render_template
+from angel_instruments import AngelInstrumentManager
 
+instrument_manager = AngelInstrumentManager()
+from flask import Flask, jsonify, render_template
 from angel_service import AngelOneService
 from stock_service import StockService
 from angel_scanner import AngelScanner
@@ -279,3 +281,53 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=5000
     )
+@app.route("/api/instruments", methods=["GET"])
+def instruments_endpoint():
+
+    result = instrument_manager.load_cache()
+
+    if not result.get("success"):
+        return jsonify(result), 500
+
+    stocks = instrument_manager.get_nse_equities()
+
+    return jsonify({
+        "success": True,
+        "count": len(stocks),
+        "stocks": stocks
+    })
+
+
+@app.route("/api/instruments/refresh", methods=["GET"])
+def refresh_instruments_endpoint():
+
+    result = instrument_manager.refresh()
+
+    if not result.get("success"):
+        return jsonify(result), 500
+
+    stocks = instrument_manager.get_nse_equities()
+
+    return jsonify({
+        "success": True,
+        "count": len(stocks),
+        "message": "Angel One instrument master refreshed.",
+        "stocks": stocks
+    })
+
+
+@app.route("/api/instrument/<symbol>", methods=["GET"])
+def instrument_endpoint(symbol):
+
+    stock = instrument_manager.find_stock(symbol)
+
+    if not stock:
+        return jsonify({
+            "success": False,
+            "message": "Stock not found."
+        }), 404
+
+    return jsonify({
+        "success": True,
+        "stock": stock
+    })
