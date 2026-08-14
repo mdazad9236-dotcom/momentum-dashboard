@@ -41,3 +41,20 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=5000
     )
+@app.route("/api/angel-test", methods=["GET"])
+def angel_test():
+
+    service = AngelOneService()
+
+    result = service.connect()
+
+    if result.get("success"):
+        return jsonify({
+            "status": "success",
+            "message": result.get("message")
+        })
+
+    return jsonify({
+        "status": "failed",
+        "message": result.get("message")
+    }), 400
