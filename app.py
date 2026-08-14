@@ -46,9 +46,10 @@ def angel_test():
 
     service = AngelOneService()
 
-    result = service.connect()
+    result = service.login()
 
     if result.get("success"):
+
         return jsonify({
             "status": "success",
             "message": result.get("message")
