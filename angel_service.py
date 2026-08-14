@@ -2,16 +2,18 @@ import os
 from datetime import datetime, timedelta
 
 import pandas as pd
+import pyotp
 from SmartApi import SmartConnect
 
 
 class AngelOneService:
 
     def __init__(self):
+
         self.api_key = os.getenv("ANGEL_API_KEY")
         self.client_code = os.getenv("ANGEL_CLIENT_CODE")
         self.password = os.getenv("ANGEL_PASSWORD")
-        self.totp = os.getenv("ANGEL_TOTP")
+        self.totp_secret = os.getenv("ANGEL_TOTP_SECRET")
 
         self.smart_api = None
         self.logged_in = False
@@ -22,61 +24,102 @@ class AngelOneService:
 
     def login(self):
 
+        # Already logged in
         if self.logged_in and self.smart_api:
-            return True
 
-        if not all([
-            self.api_key,
-            self.client_code,
-            self.password,
-            self.totp
-        ]):
-            print("Angel One credentials are missing.")
-            return False
+            return {
+                "success": True,
+                "message": "Angel One session already active."
+            }
+
+        # Check credentials
+        missing = []
+
+        if not self.api_key:
+            missing.append("ANGEL_API_KEY")
+
+        if not self.client_code:
+            missing.append("ANGEL_CLIENT_CODE")
+
+        if not self.password:
+            missing.append("ANGEL_PASSWORD")
+
+        if not self.totp_secret:
+            missing.append("ANGEL_TOTP_SECRET")
+
+        if missing:
+
+            return {
+                "success": False,
+                "message": (
+                    "Missing Angel One environment variables: "
+                    + ", ".join(missing)
+                )
+            }
 
         try:
 
+            # Create SmartAPI connection
             self.smart_api = SmartConnect(
                 api_key=self.api_key
             )
 
+            # Generate current TOTP
+            totp = pyotp.TOTP(
+                self.totp_secret
+            ).now()
+
+            # Login
             login_response = self.smart_api.generateSession(
                 self.client_code,
                 self.password,
-                self.totp
+                totp
             )
 
             if not login_response:
-                print("Angel One login failed.")
-                return False
+
+                self.smart_api = None
+                self.logged_in = False
+
+                return {
+                    "success": False,
+                    "message": "Empty response from Angel One login."
+                }
 
             if not login_response.get("status"):
-                print(
-                    "Angel One login failed:",
-                    login_response.get("message")
+
+                message = login_response.get(
+                    "message",
+                    "Angel One login failed."
                 )
-                return False
+
+                self.smart_api = None
+                self.logged_in = False
+
+                return {
+                    "success": False,
+                    "message": message
+                }
 
             self.logged_in = True
 
-            print("Angel One login successful.")
-
-            return True
+            return {
+                "success": True,
+                "message": "Angel One login successful."
+            }
 
         except Exception as error:
-
-            print(
-                "Angel One login error:",
-                error
-            )
 
             self.smart_api = None
             self.logged_in = False
 
-            return False
+            return {
+                "success": False,
+                "message": f"Angel One login error: {str(error)}"
+            }
 
     # ==========================================================
-    # LIVE QUOTE
+    # LIVE MARKET DATA
     # ==========================================================
 
     def get_quote(
@@ -86,11 +129,11 @@ class AngelOneService:
         exchange="NSE"
     ):
 
-        if not self.login():
-            return {
-                "success": False,
-                "message": "Angel One login failed."
-            }
+        login_result = self.login()
+
+        if not login_result.get("success"):
+
+            return login_result
 
         try:
 
@@ -101,7 +144,11 @@ class AngelOneService:
                 }
             )
 
-            return response
+            return {
+                "success": True,
+                "symbol": symbol,
+                "data": response
+            }
 
         except Exception as error:
 
@@ -111,7 +158,7 @@ class AngelOneService:
             }
 
     # ==========================================================
-    # HISTORICAL CANDLES
+    # HISTORICAL DATA
     # ==========================================================
 
     def get_historical_data(
@@ -123,18 +170,21 @@ class AngelOneService:
         exchange="NSE"
     ):
 
-        if not self.login():
+        login_result = self.login()
+
+        if not login_result.get("success"):
 
             return {
                 "success": False,
-                "message": "Angel One login failed.",
+                "message": login_result.get(
+                    "message",
+                    "Angel One login failed."
+                ),
                 "data": []
             }
 
         try:
 
-            # Angel One allows up to 2000 days
-            # for ONE_DAY candles.
             days = min(int(days), 2000)
 
             to_date = datetime.now()
@@ -206,7 +256,7 @@ class AngelOneService:
             }
 
     # ==========================================================
-    # HISTORICAL DATA AS DATAFRAME
+    # HISTORICAL DATAFRAME
     # ==========================================================
 
     def get_historical_dataframe(
@@ -227,16 +277,11 @@ class AngelOneService:
         )
 
         if not result.get("success"):
-
             return None
 
-        candles = result.get(
-            "data",
-            []
-        )
+        candles = result.get("data", [])
 
         if not candles:
-
             return None
 
         try:
