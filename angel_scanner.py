@@ -287,13 +287,77 @@ class AngelScanner:
             # SORT
             # --------------------------------------------------
 
-            results.sort(
-    key=lambda item: item.get(
+            # ==========================================================
+# X10 SMART FILTER
+# ==========================================================
+
+filtered_results = []
+
+for stock in results:
+
+    score = stock.get(
         "x10_score",
         0
+    )
+
+    risk_reward = stock.get(
+        "risk_reward",
+        0
+    )
+
+    trend = stock.get(
+        "trend",
+        "Neutral"
+    )
+
+    momentum = stock.get(
+        "momentum",
+        "Neutral"
+    )
+
+    # ------------------------------------------------------
+    # QUALITY FILTER
+    # ------------------------------------------------------
+
+    if score < 60:
+        continue
+
+    if risk_reward < 1.5:
+        continue
+
+    if trend not in [
+        "Bullish",
+        "Strong Bullish"
+    ]:
+        continue
+
+    if momentum not in [
+        "Positive",
+        "Neutral"
+    ]:
+        continue
+
+    filtered_results.append(stock)
+
+
+# ==========================================================
+# SORT BY X10 SCORE
+# ==========================================================
+
+filtered_results.sort(
+    key=lambda item: (
+        item.get("x10_score", 0),
+        item.get("risk_reward", 0)
     ),
     reverse=True
 )
+
+
+# ==========================================================
+# TOP OPPORTUNITIES
+# ==========================================================
+
+top_stocks = filtered_results[:20]
             # --------------------------------------------------
             # TOP OPPORTUNITIES
             # --------------------------------------------------
@@ -311,25 +375,27 @@ class AngelScanner:
             )
 
             return {
-                "success": True,
+    "success": True,
 
-                "count": len(
-                    top_stocks
-                ),
+    "count": len(
+        top_stocks
+    ),
 
-                "scanned": len(
-                    stocks
-                ),
+    "scanned": len(
+        stocks
+    ),
 
-                "successful": len(
-                    results
-                ),
+   "successful": len(results),
+"qualified": len(filtered_results),
 
-                "time_seconds": elapsed,
+    "qualified": len(
+        filtered_results
+    ),
 
-                "stocks": top_stocks
-            }
+    "time_seconds": elapsed,
 
+    "stocks": top_stocks
+}
         except Exception as error:
 
             return {
