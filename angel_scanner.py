@@ -1,3 +1,4 @@
+from x10_engine import X10Engine
 import time
 import pandas as pd
 
@@ -15,6 +16,7 @@ class AngelScanner:
     ):
         self.service = AngelOneService()
         self.instrument_manager = AngelInstrumentManager()
+        self.x10_engine = X10Engine()
 
         self.batch_size = batch_size
         self.delay = delay
@@ -56,10 +58,15 @@ class AngelScanner:
             )
 
             analysis = analyzer.calculate()
+            x10 = self.x10_engine.analyze(
+    analysis
+)
 
             technical_score = analysis.get(
                 "technical_score",
-                0
+                "x10_score": x10["x10_score"],
+
+"signal": x10["signal"],
             )
 
             return {
@@ -269,13 +276,12 @@ class AngelScanner:
             # --------------------------------------------------
 
             results.sort(
-                key=lambda item: item.get(
-                    "technical_score",
-                    0
-                ),
-                reverse=True
-            )
-
+    key=lambda item: item.get(
+        "x10_score",
+        0
+    ),
+    reverse=True
+)
             # --------------------------------------------------
             # TOP OPPORTUNITIES
             # --------------------------------------------------
