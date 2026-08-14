@@ -30,38 +30,51 @@ def home():
 # ============================================================
 # STOCK ANALYSIS
 # ============================================================
+@app.route("/api/scan", methods=["GET"])
+def scan_market():
 
-@app.route("/api/analyze/<symbol>", methods=["GET"])
-def analyze_endpoint(symbol):
+    scanner = AngelScanner(
+        batch_size=10,
+        delay=1.0
+    )
 
-    try:
+    result = scanner.scan_market(
+        limit=10
+    )
 
-        result = stock_service.get_stock_analysis(
-            symbol
-        )
-
-        if result.get("success"):
-
-            return jsonify({
-                "status": "success",
-                "data": result
-            })
+    if not result.get("success"):
 
         return jsonify({
             "status": "failed",
             "message": result.get(
                 "message",
-                "Unable to fetch stock data."
+                "Scanner failed."
             )
-        }), 400
-
-    except Exception as error:
-
-        return jsonify({
-            "status": "failed",
-            "message": str(error)
         }), 500
 
+    return jsonify({
+        "status": "success",
+        "count": result.get(
+            "count",
+            0
+        ),
+        "scanned": result.get(
+            "scanned",
+            0
+        ),
+        "successful": result.get(
+            "successful",
+            0
+        ),
+        "time_seconds": result.get(
+            "time_seconds",
+            0
+        ),
+        "stocks": result.get(
+            "stocks",
+            []
+        )
+    })
 
 # ============================================================
 # ANGEL ONE LOGIN TEST
