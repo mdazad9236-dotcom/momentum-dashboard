@@ -1,13 +1,23 @@
 from flask import Flask, jsonify, render_template
+
 from angel_service import AngelOneService
 from stock_service import StockService
-@app.route("/api/analyze/<symbol>", methods=["GET"])
 from angel_scanner import AngelScanner
+
+
+# ============================================================
+# APP INITIALIZATION
+# ============================================================
 
 app = Flask(__name__)
 
 angel_service = AngelOneService()
+stock_service = StockService()
 
+
+# ============================================================
+# HOME
+# ============================================================
 
 @app.route("/")
 def home():
@@ -15,150 +25,230 @@ def home():
     return render_template("index.html")
 
 
+# ============================================================
+# STOCK ANALYSIS
+# ============================================================
+
 @app.route("/api/analyze/<symbol>", methods=["GET"])
 def analyze_endpoint(symbol):
 
-    result = service.get_stock_analysis(symbol)
+    try:
 
-    if result.get("success"):
+        result = stock_service.get_stock_analysis(
+            symbol
+        )
+
+        if result.get("success"):
+
+            return jsonify({
+                "status": "success",
+                "data": result
+            })
 
         return jsonify({
-            "status": "success",
-            "data": result
-        })
+            "status": "failed",
+            "message": result.get(
+                "message",
+                "Unable to fetch stock data."
+            )
+        }), 400
 
-    return jsonify({
-        "status": "failed",
-        "message": result.get(
-            "message",
-            "Unable to fetch stock data."
-        )
-    }), 400
+    except Exception as error:
+
+        return jsonify({
+            "status": "failed",
+            "message": str(error)
+        }), 500
 
 
-if __name__ == "__main__":
+# ============================================================
+# ANGEL ONE LOGIN TEST
+# ============================================================
 
-    app.run(
-        host="0.0.0.0",
-        port=5000
-    )
 @app.route("/api/angel-test", methods=["GET"])
 def angel_test():
 
-    service = AngelOneService()
+    try:
 
-    result = service.login()
+        result = angel_service.login()
 
-    if result.get("success"):
+        if result:
+
+            return jsonify({
+                "status": "success",
+                "message": "Angel One login successful."
+            })
 
         return jsonify({
-            "status": "success",
-            "message": result.get("message")
-        })
+            "status": "failed",
+            "message": "Angel One login failed."
+        }), 400
 
-    return jsonify({
-        "status": "failed",
-        "message": result.get("message")
-    }), 400
+    except Exception as error:
+
+        return jsonify({
+            "status": "failed",
+            "message": str(error)
+        }), 500
+
+
+# ============================================================
+# ANGEL ONE MARKET DATA TEST
+# ============================================================
+
 @app.route("/api/market-test", methods=["GET"])
 def market_test():
 
-    service = AngelOneService()
+    try:
 
-    result = service.get_market_data_service()
+        result = angel_service.get_market_data_service()
 
-    if not result.get("success"):
+        if not result.get("success"):
+
+            return jsonify({
+                "status": "failed",
+                "message": result.get(
+                    "message",
+                    "Market data service failed."
+                )
+            }), 400
+
+        return jsonify({
+            "status": "success",
+            "message": "Angel One market-data service connected."
+        })
+
+    except Exception as error:
+
         return jsonify({
             "status": "failed",
-            "message": result.get("message")
-        }), 400
+            "message": str(error)
+        }), 500
 
-    return jsonify({
-        "status": "success",
-        "message": "Angel One market-data service connected."
-    })
+
+# ============================================================
+# ANGEL ONE LTP TEST
+# ============================================================
+
 @app.route("/api/ltp-test", methods=["GET"])
 def ltp_test():
 
-    service = AngelOneService()
+    try:
 
-    result = service.get_market_data_service()
+        result = angel_service.get_market_data_service()
 
-    if not result.get("success"):
+        if not result.get("success"):
+
+            return jsonify({
+                "status": "failed",
+                "message": result.get("message")
+            }), 400
+
+        market = result["service"]
+
+        data = market.get_ltp(
+            exchange="NSE",
+            tradingsymbol="RELIANCE-EQ",
+            symboltoken="2885"
+        )
+
+        if not data.get("success"):
+
+            return jsonify({
+                "status": "failed",
+                "message": data.get("message")
+            }), 400
+
+        return jsonify({
+            "status": "success",
+            "data": data
+        })
+
+    except Exception as error:
+
         return jsonify({
             "status": "failed",
-            "message": result.get("message")
-        }), 400
+            "message": str(error)
+        }), 500
 
-    market = result["service"]
 
-    data = market.get_ltp(
-        exchange="NSE",
-        tradingsymbol="RELIANCE-EQ",
-        symboltoken="2885"
-    )
+# ============================================================
+# MARKET SCANNER TEST
+# ============================================================
 
-    if not data.get("success"):
-        return jsonify({
-            "status": "failed",
-            "message": data.get("message")
-        }), 400
-
-    return jsonify({
-        "status": "success",
-        "data": data
-    })
 @app.route("/api/scan-test", methods=["GET"])
 def scan_test():
 
-    scanner = AngelScanner()
+    try:
 
-    result = scanner.scan_market()
+        scanner = AngelScanner()
 
-    if not result.get("success"):
+        result = scanner.scan_market()
+
+        if not result.get("success"):
+
+            return jsonify({
+                "status": "failed",
+                "message": result.get("message")
+            }), 400
+
+        return jsonify({
+            "status": "success",
+            "count": result.get("count"),
+            "stocks": result.get("stocks")
+        })
+
+    except Exception as error:
 
         return jsonify({
             "status": "failed",
-            "message": result.get("message")
-        }), 400
+            "message": str(error)
+        }), 500
 
-    return jsonify({
-        "status": "success",
-        "count": result.get("count"),
-        "stocks": result.get("stocks")
-    })
+
+# ============================================================
+# HISTORICAL DATA
+# ============================================================
+
 @app.route("/api/historical/<symbol>", methods=["GET"])
 def historical_endpoint(symbol):
+
+    token_map = {
+
+        "RELIANCE-EQ": "2885",
+        "TCS-EQ": "11536",
+        "INFY-EQ": "1594",
+        "HDFCBANK-EQ": "1333",
+        "ICICIBANK-EQ": "4963",
+        "SBIN-EQ": "3045",
+        "BHARTIARTL-EQ": "10604",
+        "ITC-EQ": "1660",
+        "LT-EQ": "11483",
+        "AXISBANK-EQ": "5900",
+        "KOTAKBANK-EQ": "1922",
+        "TATASTEEL-EQ": "3499",
+        "TATAMOTORS-EQ": "3456",
+        "MARUTI-EQ": "10999",
+        "SUNPHARMA-EQ": "3351",
+        "HINDALCO-EQ": "1363",
+        "NTPC-EQ": "11630",
+        "POWERGRID-EQ": "14977",
+        "ONGC-EQ": "2475",
+        "COALINDIA-EQ": "20374"
+    }
+
     try:
-        token_map = {
-            "RELIANCE-EQ": "2885",
-            "TCS-EQ": "11536",
-            "INFY-EQ": "1594",
-            "HDFCBANK-EQ": "1333",
-            "ICICIBANK-EQ": "4963",
-            "SBIN-EQ": "3045",
-            "BHARTIARTL-EQ": "10604",
-            "ITC-EQ": "1660",
-            "LT-EQ": "11483",
-            "AXISBANK-EQ": "5900",
-            "KOTAKBANK-EQ": "1922",
-            "TATASTEEL-EQ": "3499",
-            "TATAMOTORS-EQ": "3456",
-            "MARUTI-EQ": "10999",
-            "SUNPHARMA-EQ": "3351",
-            "HINDALCO-EQ": "1363",
-            "NTPC-EQ": "11630",
-            "POWERGRID-EQ": "14977",
-            "ONGC-EQ": "2475",
-            "COALINDIA-EQ": "20374"
-        }
 
         symbol = symbol.upper()
 
         if symbol not in token_map:
+
             return jsonify({
                 "success": False,
-                "message": "Stock symbol not found in scanner list."
+                "message": (
+                    "Stock symbol not found "
+                    "in scanner list."
+                )
             }), 404
 
         result = angel_service.get_historical_data(
@@ -172,7 +262,20 @@ def historical_endpoint(symbol):
         return jsonify(result)
 
     except Exception as error:
+
         return jsonify({
             "success": False,
             "message": str(error)
         }), 500
+
+
+# ============================================================
+# RUN LOCAL SERVER
+# ============================================================
+
+if __name__ == "__main__":
+
+    app.run(
+        host="0.0.0.0",
+        port=5000
+    )
