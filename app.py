@@ -191,35 +191,65 @@ def ltp_test():
 # MARKET SCANNER TEST
 # ============================================================
 
-@app.route("/api/scan-test", methods=["GET"])
-def scan_test():
-
+@app.route("/api/scan", methods=["GET"])
+def scan():
     try:
-
         scanner = AngelScanner()
 
         result = scanner.scan_market()
 
-        if not result.get("success"):
-
+        if not result:
             return jsonify({
-                "status": "failed",
-                "message": result.get("message")
-            }), 400
+                "success": False,
+                "message": "Scanner returned no result.",
+                "stocks": []
+            }), 500
+
+        if not result.get("success"):
+            return jsonify({
+                "success": False,
+                "message": result.get(
+                    "message",
+                    "Angel One scanner failed."
+                ),
+                "stocks": []
+            }), 500
+
+        stocks = result.get("stocks", [])
+
+        # Keep only valid stock records
+        clean_stocks = []
+
+        for stock in stocks:
+            if not isinstance(stock, dict):
+                continue
+
+            clean_stocks.append({
+                "symbol": stock.get("symbol", ""),
+                "name": stock.get("name", ""),
+                "token": stock.get("token", ""),
+                "ltp": stock.get("ltp", 0),
+                "open": stock.get("open", 0),
+                "high": stock.get("high", 0),
+                "low": stock.get("low", 0),
+                "close": stock.get("close", 0)
+            })
 
         return jsonify({
-            "status": "success",
-            "count": result.get("count"),
-            "stocks": result.get("stocks")
+            "success": True,
+            "count": len(clean_stocks),
+            "stocks": clean_stocks
         })
 
     except Exception as error:
 
-        return jsonify({
-            "status": "failed",
-            "message": str(error)
-        }), 500
+        print("SCAN API ERROR:", error)
 
+        return jsonify({
+            "success": False,
+            "message": str(error),
+            "stocks": []
+        }), 500
 
 # ============================================================
 # HISTORICAL DATA
