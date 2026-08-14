@@ -225,7 +225,6 @@ def ltp_test():
 # MARKET SCANNER TEST
 # ============================================================
 
-@app.route("/api/scan", methods=["GET"])
 def scan():
     try:
         scanner = AngelScanner()
