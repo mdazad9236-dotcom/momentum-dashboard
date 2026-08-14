@@ -1,6 +1,4 @@
-from x10_engine import X10Engine
 import time
-import pandas as pd
 
 from angel_service import AngelOneService
 from angel_instruments import AngelInstrumentManager
@@ -9,26 +7,19 @@ from analysis import TechnicalAnalyzer
 
 class AngelScanner:
 
-    def __init__(
-        self,
-        batch_size=10,
-        delay=1.0
-    ):
+    def __init__(self, batch_size=10, delay=1.0):
+
         self.service = AngelOneService()
         self.instrument_manager = AngelInstrumentManager()
-        self.x10_engine = X10Engine()
 
         self.batch_size = batch_size
         self.delay = delay
 
     # ==========================================================
-    # SCORE STOCK
+    # ANALYZE ONE STOCK
     # ==========================================================
 
-    def analyze_stock(
-        self,
-        stock
-    ):
+    def analyze_stock(self, stock):
 
         symbol = stock.get("symbol")
         token = stock.get("token")
@@ -47,43 +38,95 @@ class AngelScanner:
                 exchange="NSE"
             )
 
-            if dataframe is None:
+            if dataframe is None or dataframe.empty:
                 return None
 
-            if dataframe.empty:
-                return None
-
-            analyzer = TechnicalAnalyzer(
-                dataframe
-            )
+            analyzer = TechnicalAnalyzer(dataframe)
 
             analysis = analyzer.calculate()
-            "x10_score": x10["x10_score"],
-
-"signal": x10["signal"],
-
-"entry": x10["entry"],
-
-"stop_loss": x10["stop_loss"],
-
-"target": x10["target"],
-
-"risk": x10["risk"],
-
-"reward": x10["reward"],
-
-"risk_reward": x10["risk_reward"],
 
             technical_score = analysis.get(
                 "technical_score",
-                "x10_score": x10["x10_score"],
-
-"signal": x10["signal"],
+                0
             )
 
+            # --------------------------------------------------
+            # X10 SCORE
+            # --------------------------------------------------
+
+            x10_score = technical_score
+
+            # Extra momentum confirmation
+
+            if analysis.get("trend") == "Strong Bullish":
+                x10_score += 5
+
+            elif analysis.get("trend") == "Bullish":
+                x10_score += 3
+
+            if analysis.get("momentum") == "Positive":
+                x10_score += 5
+
+            # RSI confirmation
+
+            rsi = analysis.get("rsi", 50)
+
+            if 55 <= rsi <= 70:
+                x10_score += 5
+
+            # ADX confirmation
+
+            adx = analysis.get("adx", 0)
+
+            if adx >= 25:
+                x10_score += 5
+
+            # Volume confirmation
+
+            volume_ratio = analysis.get(
+                "volume_ratio",
+                0
+            )
+
+            if volume_ratio >= 1.5:
+                x10_score += 5
+
+            x10_score = min(
+                int(x10_score),
+                100
+            )
+
+            # --------------------------------------------------
+            # SUCCESS PROBABILITY
+            # --------------------------------------------------
+
+            probability = x10_score
+
+            if probability >= 80:
+                signal = "VERY STRONG"
+
+            elif probability >= 70:
+                signal = "STRONG"
+
+            elif probability >= 60:
+                signal = "BULLISH"
+
+            elif probability >= 50:
+                signal = "NEUTRAL"
+
+            else:
+                signal = "WEAK"
+
+            # --------------------------------------------------
+            # FINAL STOCK RESULT
+            # --------------------------------------------------
+
             return {
+
                 "symbol": symbol,
+
                 "token": str(token),
+
                 "name": name,
 
                 "price": analysis.get(
@@ -92,6 +135,12 @@ class AngelScanner:
                 ),
 
                 "technical_score": technical_score,
+
+                "x10_score": x10_score,
+
+                "success_probability": probability,
+
+                "signal": signal,
 
                 "trend": analysis.get(
                     "trend",
@@ -196,46 +245,33 @@ class AngelScanner:
     # SCAN MARKET
     # ==========================================================
 
-    def scan_market(
-        self,
-        limit=50
-    ):
+    def scan_market(self, limit=50):
 
         start_time = time.time()
 
         try:
 
             # --------------------------------------------------
-            # LOAD INSTRUMENT MASTER
+            # LOAD ANGEL ONE INSTRUMENTS
             # --------------------------------------------------
 
-            result = (
-                self.instrument_manager.load_cache()
-            )
+            result = self.instrument_manager.load_cache()
 
             if not result.get("success"):
 
                 return {
                     "success": False,
-                    "message": (
-                        "Unable to load "
-                        "Angel One instruments."
-                    ),
+                    "message": "Unable to load Angel One instruments.",
                     "stocks": []
                 }
 
-            stocks = (
-                self.instrument_manager
-                .get_nse_equities()
-            )
+            stocks = self.instrument_manager.get_nse_equities()
 
             if not stocks:
 
                 return {
                     "success": False,
-                    "message": (
-                        "No NSE equity stocks found."
-                    ),
+                    "message": "No NSE equity stocks found.",
                     "stocks": []
                 }
 
@@ -246,8 +282,7 @@ class AngelScanner:
             stocks = stocks[:limit]
 
             print(
-                f"Starting scanner for "
-                f"{len(stocks)} stocks..."
+                f"Starting scanner for {len(stocks)} stocks..."
             )
 
             results = []
@@ -266,9 +301,7 @@ class AngelScanner:
                     f"{stock.get('symbol')}"
                 )
 
-                analysis = (
-                    self.analyze_stock(stock)
-                )
+                analysis = self.analyze_stock(stock)
 
                 if analysis:
 
@@ -276,88 +309,22 @@ class AngelScanner:
                         analysis
                     )
 
-                # Small delay prevents
-                # aggressive API requests.
-
                 time.sleep(
                     self.delay
                 )
 
             # --------------------------------------------------
-            # SORT
+            # SORT BY X10 SCORE
             # --------------------------------------------------
 
-            # ==========================================================
-# X10 SMART FILTER
-# ==========================================================
+            results.sort(
+                key=lambda item: item.get(
+                    "x10_score",
+                    0
+                ),
+                reverse=True
+            )
 
-filtered_results = []
-
-for stock in results:
-
-    score = stock.get(
-        "x10_score",
-        0
-    )
-
-    risk_reward = stock.get(
-        "risk_reward",
-        0
-    )
-
-    trend = stock.get(
-        "trend",
-        "Neutral"
-    )
-
-    momentum = stock.get(
-        "momentum",
-        "Neutral"
-    )
-
-    # ------------------------------------------------------
-    # QUALITY FILTER
-    # ------------------------------------------------------
-
-    if score < 60:
-        continue
-
-    if risk_reward < 1.5:
-        continue
-
-    if trend not in [
-        "Bullish",
-        "Strong Bullish"
-    ]:
-        continue
-
-    if momentum not in [
-        "Positive",
-        "Neutral"
-    ]:
-        continue
-
-    filtered_results.append(stock)
-
-
-# ==========================================================
-# SORT BY X10 SCORE
-# ==========================================================
-
-filtered_results.sort(
-    key=lambda item: (
-        item.get("x10_score", 0),
-        item.get("risk_reward", 0)
-    ),
-    reverse=True
-)
-
-
-# ==========================================================
-# TOP OPPORTUNITIES
-# ==========================================================
-
-top_stocks = filtered_results[:20]
             # --------------------------------------------------
             # TOP OPPORTUNITIES
             # --------------------------------------------------
@@ -370,35 +337,39 @@ top_stocks = filtered_results[:20]
             )
 
             print(
-                f"Scanner completed in "
-                f"{elapsed} seconds."
+                f"Scanner completed in {elapsed} seconds."
             )
 
             return {
-    "success": True,
 
-    "count": len(
-        top_stocks
-    ),
+                "success": True,
 
-    "scanned": len(
-        stocks
-    ),
+                "count": len(
+                    top_stocks
+                ),
 
-   "successful": len(results),
-"qualified": len(filtered_results),
+                "scanned": len(
+                    stocks
+                ),
 
-    "qualified": len(
-        filtered_results
-    ),
+                "successful": len(
+                    results
+                ),
 
-    "time_seconds": elapsed,
+                "time_seconds": elapsed,
 
-    "stocks": top_stocks
-}
+                "stocks": top_stocks
+            }
+
         except Exception as error:
 
+            print(
+                "Market scanner error:",
+                error
+            )
+
             return {
+
                 "success": False,
 
                 "message": str(
