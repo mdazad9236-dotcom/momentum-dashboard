@@ -1,1 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+    <title>Stock Analysis Dashboard</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            color: #222;
+        }
+
+        .header {
+            background: #111827;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+
+        .header p {
+            margin: 8px 0 0;
+            color: #cbd5e1;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .search-box {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+            display: flex;
+            gap: 10px;
+        }
+
+        .search-box input {
+            flex: 1;
+            padding: 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .search-box button {
+            padding: 14px 25px;
+            border: none;
+            border-radius: 8px;
+            background: #2563eb;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .search-box button:hover {
+            background: #1d4ed8;
+        }
+
+        .loading {
+            display: none;
+            margin-top: 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .error {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            background: #fee2e2;
+            color: #991b1b;
+            border-radius: 8px;
+        }
+
+        .dashboard {
+            display: none;
+            margin-top: 25px;
+        }
+
+        .stock-header {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .stock-header h2 {
+            margin: 0;
+        }
+
+        .stock-header p {
+            color: #6b7280;
+            margin: 8px 0;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .card h3 {
+            margin-top: 0;
+            color: #374151;
+        }
+
+        .card p {
+            margin: 8px 0;
+        }
+
+        .analysis {
+            margin-top: 20px;
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .analysis-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .analysis-row:last-child {
+            border-bottom: none;
+        }
+
+        .analysis-key {
+            font-weight: bold;
+            color: #374151;
+        }
+
+        .analysis-value {
+            color: #111827;
+            text-align: right;
+        }
+
+        @media (max-width: 600px) {
+            .search-box {
+                flex-direction: column;
+            }
+
+            .search-box button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <h1>📈 Stock Analysis Dashboard</h1>
+        <p>Technical analysis powered by Python</p>
+    </div>
+
+    <div class="container">
+
+        <div class="search-box">
+            <input
+                type="text"
+                id="symbol"
+                placeholder="Enter NSE stock symbol e.g. RELIANCE"
+            >
+
+            <button onclick="analyzeStock()">
+                Analyze Stock
+            </button>
+        </div>
+
+        <div class="loading" id="loading">
+            ⏳ Fetching stock data and calculating analysis...
+        </div>
+
+        <div class="error" id="error"></div>
+
+        <div class="dashboard" id="dashboard">
+
+            <div class="stock-header">
+                <h2 id="company"></h2>
+                <p>
+                    Symbol: <strong id="stockSymbol"></strong>
+                </p>
+                <p>
+                    Sector: <span id="sector"></span>
+                </p>
+                <p>
+                    Industry: <span id="industry"></span>
+                </p>
+            </div>
+
+            <div class="analysis">
+
+                <h2>Technical Analysis</h2>
+
+                <div id="analysisResults"></div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+<script>
+
+async function analyzeStock() {
+
+    const input = document.getElementById("symbol");
+
+    const symbol = input.value.trim().toUpperCase();
+
+    const loading = document.getElementById("loading");
+    const error = document.getElementById("error");
+    const dashboard = document.getElementById("dashboard");
+    const results = document.getElementById("analysisResults");
+
+    error.style.display = "none";
+    dashboard.style.display = "none";
+    results.innerHTML = "";
+
+    if (!symbol) {
+
+        error.textContent = "Please enter a stock symbol.";
+
+        error.style.display = "block";
+
+        return;
+    }
+
+    loading.style.display = "block";
+
+    try {
+
+        const response = await fetch(
+            `/api/analyze/${encodeURIComponent(symbol)}`
+        );
+
+        const result = await response.json();
+
+        loading.style.display = "none";
+
+        if (!response.ok || result.status !== "success") {
+
+            error.textContent =
+                result.message || "Unable to analyze this stock.";
+
+            error.style.display = "block";
+
+            return;
+        }
+
+        const data = result.data;
+
+        document.getElementById("company").textContent =
+            data.company || data.symbol;
+
+        document.getElementById("stockSymbol").textContent =
+            data.symbol || symbol;
+
+        document.getElementById("sector").textContent =
+            data.sector || "Unknown";
+
+        document.getElementById("industry").textContent =
+            data.industry || "Unknown";
+
+        const analysis = data.analysis || {};
+
+        for (const [key, value] of Object.entries(analysis)) {
+
+            const row = document.createElement("div");
+
+            row.className = "analysis-row";
+
+            const keyElement = document.createElement("div");
+
+            keyElement.className = "analysis-key";
+
+            keyElement.textContent = formatKey(key);
+
+            const valueElement = document.createElement("div");
+
+            valueElement.className = "analysis-value";
+
+            if (typeof value === "object" && value !== null) {
+
+                valueElement.textContent =
+                    JSON.stringify(value);
+
+            } else {
+
+                valueElement.textContent =
+                    value ?? "N/A";
+
+            }
+
+            row.appendChild(keyElement);
+
+            row.appendChild(valueElement);
+
+            results.appendChild(row);
+        }
+
+        dashboard.style.display = "block";
+
+    } catch (err) {
+
+        loading.style.display = "none";
+
+        error.textContent =
+            "Unable to connect to the stock analysis server.";
+
+        error.style.display = "block";
+
+        console.error(err);
+    }
+}
+
+
+function formatKey(key) {
+
+    return String(key)
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, letter => letter.toUpperCase());
+
+}
+
+
+document
+    .getElementById("symbol")
+    .addEventListener("keypress", function(event) {
+
+        if (event.key === "Enter") {
+
+            analyzeStock();
+
+        }
+
+    });
+
+</script>
+
+</body>
+</html>
