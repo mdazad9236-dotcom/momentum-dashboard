@@ -9,7 +9,7 @@ from datetime import datetime
 # ============================================================
 
 INSTRUMENT_URL = (
-    "https://margincalculator.angelbroking.com/"
+    "https://margincalculator.angelone.in/"
     "OpenAPI_File/files/OpenAPIScripMaster.json"
 )
 
