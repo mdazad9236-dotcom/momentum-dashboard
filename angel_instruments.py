@@ -4,6 +4,10 @@ import requests
 from datetime import datetime
 
 
+# ============================================================
+# ANGEL ONE INSTRUMENT MASTER
+# ============================================================
+
 INSTRUMENT_URL = (
     "https://margincalculator.angelbroking.com/"
     "OpenAPI_File/files/OpenAPIScripMaster.json"
@@ -15,6 +19,7 @@ CACHE_FILE = "angel_instruments.json"
 class AngelInstrumentManager:
 
     def __init__(self):
+
         self.instruments = []
 
     # ==========================================================
@@ -24,9 +29,14 @@ class AngelInstrumentManager:
     def download_master(self):
 
         try:
+
+            print(
+                "Downloading Angel One instrument master..."
+            )
+
             response = requests.get(
                 INSTRUMENT_URL,
-                timeout=30
+                timeout=(10, 90)
             )
 
             response.raise_for_status()
@@ -34,9 +44,14 @@ class AngelInstrumentManager:
             data = response.json()
 
             if not isinstance(data, list):
+
                 raise ValueError(
                     "Invalid Angel One instrument data."
                 )
+
+            # --------------------------------------------------
+            # SAVE CACHE
+            # --------------------------------------------------
 
             with open(
                 CACHE_FILE,
@@ -52,13 +67,56 @@ class AngelInstrumentManager:
             self.instruments = data
 
             print(
-                f"Angel One instruments downloaded: {len(data)}"
+                "Angel One instruments downloaded:",
+                len(data)
             )
 
             return {
+
                 "success": True,
+
                 "count": len(data),
-                "message": "Instrument master downloaded."
+
+                "message": (
+                    "Instrument master downloaded."
+                )
+            }
+
+        except requests.exceptions.Timeout:
+
+            print(
+                "Instrument download timed out."
+            )
+
+            return {
+
+                "success": False,
+
+                "count": 0,
+
+                "message": (
+                    "Angel One instrument master "
+                    "download timed out."
+                )
+            }
+
+        except requests.exceptions.RequestException as error:
+
+            print(
+                "Instrument download request error:",
+                error
+            )
+
+            return {
+
+                "success": False,
+
+                "count": 0,
+
+                "message": (
+                    "Unable to download Angel One "
+                    f"instrument master: {error}"
+                )
             }
 
         except Exception as error:
@@ -69,8 +127,11 @@ class AngelInstrumentManager:
             )
 
             return {
+
                 "success": False,
+
                 "count": 0,
+
                 "message": str(error)
             }
 
@@ -80,34 +141,97 @@ class AngelInstrumentManager:
 
     def load_cache(self):
 
-        if not os.path.exists(CACHE_FILE):
-            return self.download_master()
+        # ------------------------------------------------------
+        # ALREADY LOADED IN MEMORY
+        # ------------------------------------------------------
 
-        try:
-
-            with open(
-                CACHE_FILE,
-                "r",
-                encoding="utf-8"
-            ) as file:
-
-                self.instruments = json.load(file)
+        if self.instruments:
 
             return {
+
                 "success": True,
-                "count": len(self.instruments),
-                "message": "Instrument cache loaded."
+
+                "count": len(
+                    self.instruments
+                ),
+
+                "message": (
+                    "Instrument cache already loaded."
+                )
             }
 
-        except Exception:
+        # ------------------------------------------------------
+        # CHECK LOCAL CACHE FILE
+        # ------------------------------------------------------
 
-            return self.download_master()
+        if os.path.exists(CACHE_FILE):
+
+            try:
+
+                with open(
+                    CACHE_FILE,
+                    "r",
+                    encoding="utf-8"
+                ) as file:
+
+                    data = json.load(file)
+
+                if not isinstance(data, list):
+
+                    raise ValueError(
+                        "Instrument cache is not a list."
+                    )
+
+                if not data:
+
+                    raise ValueError(
+                        "Instrument cache is empty."
+                    )
+
+                self.instruments = data
+
+                print(
+                    "Angel One instrument cache loaded:",
+                    len(data)
+                )
+
+                return {
+
+                    "success": True,
+
+                    "count": len(data),
+
+                    "message": (
+                        "Instrument cache loaded."
+                    )
+                }
+
+            except Exception as error:
+
+                print(
+                    "Instrument cache read error:",
+                    error
+                )
+
+        # ------------------------------------------------------
+        # CACHE DOES NOT EXIST / INVALID
+        # ------------------------------------------------------
+
+        print(
+            "Instrument cache unavailable."
+        )
+
+        return self.download_master()
 
     # ==========================================================
     # REFRESH
     # ==========================================================
 
     def refresh(self):
+
+        print(
+            "Refreshing Angel One instrument master..."
+        )
 
         return self.download_master()
 
@@ -118,7 +242,12 @@ class AngelInstrumentManager:
     def get_nse_equities(self):
 
         if not self.instruments:
-            self.load_cache()
+
+            result = self.load_cache()
+
+            if not result.get("success"):
+
+                return []
 
         stocks = []
 
@@ -127,26 +256,45 @@ class AngelInstrumentManager:
             if not isinstance(item, dict):
                 continue
 
+            # --------------------------------------------------
+            # NSE ONLY
+            # --------------------------------------------------
+
             if item.get("exch_seg") != "NSE":
                 continue
 
             symbol = str(
-                item.get("symbol", "")
+                item.get(
+                    "symbol",
+                    ""
+                )
             ).strip()
 
             token = str(
-                item.get("token", "")
+                item.get(
+                    "token",
+                    ""
+                )
             ).strip()
 
             name = str(
-                item.get("name", "")
+                item.get(
+                    "name",
+                    ""
+                )
             ).strip()
 
             instrument_type = str(
-                item.get("instrumenttype", "")
+                item.get(
+                    "instrumenttype",
+                    ""
+                )
             ).strip()
 
-            # We only want normal NSE equity.
+            # --------------------------------------------------
+            # NORMAL NSE EQUITY ONLY
+            # --------------------------------------------------
+
             if not symbol.endswith("-EQ"):
                 continue
 
@@ -154,10 +302,15 @@ class AngelInstrumentManager:
                 continue
 
             stocks.append({
+
                 "symbol": symbol,
+
                 "token": token,
+
                 "name": name,
+
                 "exchange": "NSE",
+
                 "instrumenttype": instrument_type
             })
 
@@ -170,17 +323,34 @@ class AngelInstrumentManager:
     def find_stock(self, symbol):
 
         if not self.instruments:
-            self.load_cache()
 
-        symbol = symbol.upper().strip()
+            result = self.load_cache()
+
+            if not result.get("success"):
+
+                return None
+
+        symbol = str(
+            symbol
+        ).upper().strip()
 
         for item in self.instruments:
 
+            if not isinstance(item, dict):
+                continue
+
+            item_symbol = str(
+                item.get(
+                    "symbol",
+                    ""
+                )
+            ).upper().strip()
+
             if (
                 item.get("exch_seg") == "NSE"
-                and item.get("symbol", "").upper()
-                == symbol
+                and item_symbol == symbol
             ):
+
                 return item
 
         return None
@@ -191,13 +361,17 @@ class AngelInstrumentManager:
 
     def get_token(self, symbol):
 
-        stock = self.find_stock(symbol)
+        stock = self.find_stock(
+            symbol
+        )
 
         if not stock:
             return None
 
         return str(
-            stock.get("token")
+            stock.get(
+                "token"
+            )
         )
 
     # ==========================================================
@@ -209,8 +383,14 @@ class AngelInstrumentManager:
         stocks = self.get_nse_equities()
 
         return {
+
             "success": True,
-            "count": len(stocks),
+
+            "count": len(
+                stocks
+            ),
+
             "updated": datetime.now().isoformat(),
+
             "stocks": stocks
         }
