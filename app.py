@@ -21,10 +21,15 @@ instrument_manager = AngelInstrumentManager()
 # HOME
 # ============================================================
 
-@app.route("/", methods=["GET"])
+@app.route(
+    "/",
+    methods=["GET"]
+)
 def home():
 
-    return render_template("index.html")
+    return render_template(
+        "index.html"
+    )
 
 
 # ============================================================
@@ -52,7 +57,9 @@ def analyze_stock(symbol):
                 "message": "No analysis result returned."
             }), 500
 
-        return jsonify(result)
+        return jsonify(
+            result
+        )
 
     except Exception as error:
 
@@ -118,7 +125,10 @@ def market_test():
 
     try:
 
-        result = angel_service.get_market_data_service()
+        result = (
+            angel_service
+            .get_market_data_service()
+        )
 
         if not result.get("success"):
 
@@ -162,7 +172,10 @@ def ltp_test():
 
     try:
 
-        result = angel_service.get_market_data_service()
+        result = (
+            angel_service
+            .get_market_data_service()
+        )
 
         if not result.get("success"):
 
@@ -174,7 +187,9 @@ def ltp_test():
                 )
             }), 400
 
-        market = result.get("service")
+        market = result.get(
+            "service"
+        )
 
         if market is None:
 
@@ -240,6 +255,10 @@ def scan():
             limit=5
         )
 
+        # ----------------------------------------------------
+        # CHECK SCANNER RESULT
+        # ----------------------------------------------------
+
         if not result:
 
             return jsonify({
@@ -250,75 +269,42 @@ def scan():
                 "stocks": []
             }), 500
 
+        # ----------------------------------------------------
+        # CHECK SCANNER SUCCESS
+        # ----------------------------------------------------
+
         if not result.get("success"):
 
-            stocks = result.get(
-    "stocks",
-    []
-)
-        clean_stocks = []
+            return jsonify({
+                "success": False,
+                "message": result.get(
+                    "message",
+                    "Angel One scanner failed."
+                ),
+                "stocks": []
+            }), 500
 
-for stock in stocks:
+        # ----------------------------------------------------
+        # GET STOCK RESULTS
+        # ----------------------------------------------------
 
-    if not isinstance(stock, dict):
-        continue
-
-    clean_stocks.append({
-        "symbol": stock.get("symbol", ""),
-        "name": stock.get("name", ""),
-        "token": stock.get("token", ""),
-        "price": stock.get("price", 0),
-        "technical_score": stock.get("technical_score", 0),
-        "x10_score": stock.get("x10_score", 0),
-        "success_probability": stock.get("success_probability", 0),
-        "signal": stock.get("signal", "AVOID"),
-        "entry": stock.get("entry", 0),
-        "stop_loss": stock.get("stop_loss", 0),
-        "target": stock.get("target", 0),
-        "risk": stock.get("risk", 0),
-        "reward": stock.get("reward", 0),
-        "risk_reward": stock.get("risk_reward", 0),
-        "trend": stock.get("trend", "Neutral"),
-        "momentum": stock.get("momentum", "Neutral"),
-        "rsi": stock.get("rsi", 0),
-        "ema20": stock.get("ema20", 0),
-        "ema50": stock.get("ema50", 0),
-        "ema200": stock.get("ema200", 0),
-        "macd": stock.get("macd", 0),
-        "macd_signal": stock.get("macd_signal", 0),
-        "macd_histogram": stock.get("macd_histogram", 0),
-        "adx": stock.get("adx", 0),
-        "plus_di": stock.get("plus_di", 0),
-        "minus_di": stock.get("minus_di", 0),
-        "support": stock.get("support", 0),
-        "resistance": stock.get("resistance", 0),
-        "volume_ratio": stock.get("volume_ratio", 0),
-        "atr": stock.get("atr", 0),
-        "52_week_high": stock.get("52_week_high", 0),
-        "52_week_low": stock.get("52_week_low", 0)
-    })
-          
-        return jsonify({
-        "success": True,
-        "count": len(clean_stocks),
-        "scanned": result.get("scanned", 0),
-        "successful": result.get("successful", 0),
-        "time_seconds": result.get("time_seconds", 0),
-        "stocks": clean_stocks
-    })
+        stocks = result.get(
+            "stocks",
+            []
+        )
 
         # ----------------------------------------------------
         # CLEAN STOCK RESULTS
-        #
-        # IMPORTANT:
-        # Keep the X10 fields produced by AngelScanner.
         # ----------------------------------------------------
 
         clean_stocks = []
 
         for stock in stocks:
 
-            if not isinstance(stock, dict):
+            if not isinstance(
+                stock,
+                dict
+            ):
                 continue
 
             clean_stocks.append({
@@ -361,7 +347,7 @@ for stock in stocks:
                 ),
 
                 # ------------------------------------------------
-                # X10
+                # X10 SCORE
                 # ------------------------------------------------
 
                 "x10_score": stock.get(
@@ -541,7 +527,7 @@ for stock in stocks:
             })
 
         # ----------------------------------------------------
-        # RETURN COMPLETE X10 SCAN
+        # RETURN X10 SCAN RESULT
         # ----------------------------------------------------
 
         return jsonify({
@@ -586,6 +572,7 @@ for stock in stocks:
             ),
 
             "stocks": []
+
         }), 500
 
 
@@ -645,7 +632,9 @@ def historical_endpoint(symbol):
             exchange="NSE"
         )
 
-        return jsonify(result)
+        return jsonify(
+            result
+        )
 
     except Exception as error:
 
@@ -676,7 +665,9 @@ def instruments_endpoint():
 
         if not result.get("success"):
 
-            return jsonify(result), 500
+            return jsonify(
+                result
+            ), 500
 
         stocks = (
             instrument_manager
@@ -710,6 +701,7 @@ def instruments_endpoint():
             ),
 
             "stocks": []
+
         }), 500
 
 
@@ -729,7 +721,9 @@ def refresh_instruments_endpoint():
 
         if not result.get("success"):
 
-            return jsonify(result), 500
+            return jsonify(
+                result
+            ), 500
 
         stocks = (
             instrument_manager
@@ -767,6 +761,7 @@ def refresh_instruments_endpoint():
             ),
 
             "stocks": []
+
         }), 500
 
 
@@ -784,8 +779,9 @@ def instrument_endpoint(symbol):
 
         symbol = symbol.upper().strip()
 
-        stock = instrument_manager.find_stock(
-            symbol
+        stock = (
+            instrument_manager
+            .find_stock(symbol)
         )
 
         if not stock:
@@ -795,6 +791,7 @@ def instrument_endpoint(symbol):
                 "success": False,
 
                 "message": "Stock not found."
+
             }), 404
 
         return jsonify({
@@ -818,6 +815,7 @@ def instrument_endpoint(symbol):
             "message": str(
                 error
             )
+
         }), 500
 
 
