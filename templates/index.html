@@ -921,73 +921,24 @@
 
                 </thead>
 
+            <tbody id="opportunity-table">
 
-                <tbody
-                    id="opportunity-table"
-                >
+    <tr>
 
-                    <tr>
+        <td colspan="7">
 
-                        <td>
-                            —
-                        </td>
+            <div id="x10-status">
 
-                        <td
-                            class="stock-name"
-                        >
-                            X10 Scanner starting...
-                        </td>
+                ⚡ X10 Engine initializing...
 
-                        <td>
-                            —
-                        </td>
+            </div>
 
-                        <td
-                            class="score"
-                        >
-                            —
-                        </td>
+        </td>
 
-                        <td>
-                            Waiting
-                        </td>
+    </tr>
 
-                        <td>
-                            —
-                        </td>
-
-                        <td>
-                            —
-                        </td>
-
-                        <td>
-                            —
-                        </td>
-
-                        <td>
-                            —
-                        </td>
-
-                        <td>
-                            —
-                        </td>
-
-                        <td>
-                            —
-                        </td>
-
-                        <td>
-                            —
-                        </td>
-
-                        <td>
-                            —
-                        </td>
-
-                    </tr>
-
-                </tbody>
-
+</tbody>
+               
 
             </table>
 
@@ -1006,7 +957,27 @@
 
 
     </div>
+    <!-- =========================
+     X10 SCANNER STATUS
+========================= -->
 
+<div class="section">
+
+    <div class="search-panel">
+
+        <h3>
+            🤖 X10 Engine Status
+        </h3>
+
+        <br>
+
+        <p id="scan-info">
+            Waiting for market scan...
+        </p>
+
+    </div>
+
+</div>
 
     <!-- =========================
          STOCK SEARCH
@@ -2053,7 +2024,228 @@ document.addEventListener(
 
     }
 );
+/* =========================
+   X10 ENGINE AUTO SCANNER
+========================= */
 
+
+async function loadX10Scanner() {
+
+
+    const table =
+        document.getElementById(
+            "opportunity-table"
+        );
+
+
+    const status =
+        document.getElementById(
+            "x10-status"
+        );
+
+
+    const scanInfo =
+        document.getElementById(
+            "scan-info"
+        );
+
+
+    try {
+
+
+        status.innerHTML =
+            "⚡ X10 Engine scanning market...";
+
+
+        scanInfo.innerHTML =
+            "Fetching Angel One market data...";
+
+
+        const response =
+            await fetch(
+                "/api/scan"
+            );
+
+
+        const result =
+            await response.json();
+
+
+
+        if(
+            !result.success
+        ){
+
+            status.innerHTML =
+                "❌ Scanner failed";
+
+
+            scanInfo.innerHTML =
+                result.message ||
+                "Unknown error";
+
+
+            return;
+
+        }
+
+
+
+        table.innerHTML = "";
+
+
+
+        if(
+            result.stocks.length === 0
+        ){
+
+            table.innerHTML = `
+
+            <tr>
+
+                <td colspan="7">
+
+                    No X10 opportunities found.
+
+                </td>
+
+            </tr>
+
+            `;
+
+            return;
+
+        }
+
+
+
+        result.stocks.forEach(
+            function(stock,index){
+
+
+                const row =
+                    document.createElement(
+                        "tr"
+                    );
+
+
+                row.innerHTML = `
+
+
+                <td>
+
+                    ${index + 1}
+
+                </td>
+
+
+                <td class="stock-name">
+
+                    ${stock.name || stock.symbol}
+
+                </td>
+
+
+                <td>
+
+                    ₹${Number(stock.price).toFixed(2)}
+
+                </td>
+
+
+                <td class="score">
+
+                    ${stock.x10_score}
+
+                </td>
+
+
+                <td class="signal">
+
+                    ${stock.signal}
+
+                </td>
+
+
+                <td>
+
+                    ${stock.trend}
+
+                </td>
+
+
+                <td>
+
+                    ${stock.volume_ratio}
+
+                </td>
+
+
+                `;
+
+
+                table.appendChild(row);
+
+
+            }
+
+        );
+
+
+
+        status.innerHTML =
+            "✅ X10 Engine completed successfully";
+
+
+        scanInfo.innerHTML =
+
+            `Scanned: ${result.scanned} stocks | 
+             Successful: ${result.successful} |
+             Returned: ${result.count} |
+             Time: ${result.time_seconds}s`;
+
+
+
+    }
+
+
+    catch(error){
+
+
+        console.error(
+            "X10 Scanner Error:",
+            error
+        );
+
+
+        status.innerHTML =
+            "❌ Connection error";
+
+
+        scanInfo.innerHTML =
+            "Unable to connect with X10 scanner";
+
+
+    }
+
+
+}
+
+
+
+/* =========================
+   START X10 WHEN PAGE LOADS
+========================= */
+
+
+window.addEventListener(
+    "load",
+    function(){
+
+        loadX10Scanner();
+
+    }
+);
 
 </script>
 
