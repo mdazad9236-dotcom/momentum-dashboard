@@ -62,7 +62,8 @@ class AngelOneService:
             self.smart_api = SmartConnect(
                 api_key=self.api_key
             )
-
+            self.smart_api.timeout = 20
+            
             # Generate current TOTP
             totp = pyotp.TOTP(
                 self.totp_secret
