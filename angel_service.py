@@ -267,9 +267,9 @@ class AngelOneService:
             # Angel One market-data response normally
             # contains fetched data under fetchedData.
             fetched_data = data.get(
-                "fetchedData",
-                []
-            )
+            "fetched",
+            []
+    )
 
             if not fetched_data:
 
