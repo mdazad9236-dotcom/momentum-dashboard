@@ -252,19 +252,60 @@ def scan():
 
         if not result.get("success"):
 
-            return jsonify({
-                "success": False,
-                "message": result.get(
-                    "message",
-                    "Angel One scanner failed."
-                ),
-                "stocks": []
-            }), 500
+            stocks = result.get(
+    "stocks",
+    []
+)
+        clean_stocks = []
 
-        stocks = result.get(
-            "stocks",
-            []
-        )
+for stock in stocks:
+
+    if not isinstance(stock, dict):
+        continue
+
+    clean_stocks.append({
+        "symbol": stock.get("symbol", ""),
+        "name": stock.get("name", ""),
+        "token": stock.get("token", ""),
+        "price": stock.get("price", 0),
+        "technical_score": stock.get("technical_score", 0),
+        "x10_score": stock.get("x10_score", 0),
+        "success_probability": stock.get("success_probability", 0),
+        "signal": stock.get("signal", "AVOID"),
+        "entry": stock.get("entry", 0),
+        "stop_loss": stock.get("stop_loss", 0),
+        "target": stock.get("target", 0),
+        "risk": stock.get("risk", 0),
+        "reward": stock.get("reward", 0),
+        "risk_reward": stock.get("risk_reward", 0),
+        "trend": stock.get("trend", "Neutral"),
+        "momentum": stock.get("momentum", "Neutral"),
+        "rsi": stock.get("rsi", 0),
+        "ema20": stock.get("ema20", 0),
+        "ema50": stock.get("ema50", 0),
+        "ema200": stock.get("ema200", 0),
+        "macd": stock.get("macd", 0),
+        "macd_signal": stock.get("macd_signal", 0),
+        "macd_histogram": stock.get("macd_histogram", 0),
+        "adx": stock.get("adx", 0),
+        "plus_di": stock.get("plus_di", 0),
+        "minus_di": stock.get("minus_di", 0),
+        "support": stock.get("support", 0),
+        "resistance": stock.get("resistance", 0),
+        "volume_ratio": stock.get("volume_ratio", 0),
+        "atr": stock.get("atr", 0),
+        "52_week_high": stock.get("52_week_high", 0),
+        "52_week_low": stock.get("52_week_low", 0)
+    })
+          
+        return jsonify({
+        "success": True,
+        "count": len(clean_stocks),
+        "scanned": result.get("scanned", 0),
+        "successful": result.get("successful", 0),
+        "time_seconds": result.get("time_seconds", 0),
+        "stocks": clean_stocks
+    })
 
         # ----------------------------------------------------
         # CLEAN STOCK RESULTS
