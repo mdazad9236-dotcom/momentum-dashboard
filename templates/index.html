@@ -1570,7 +1570,180 @@ window.addEventListener(
     }
 );
 
+/* =========================
+   X10 MARKET SCANNER
+========================= */
 
+async function loadX10Scanner() {
+
+    const table =
+        document.getElementById("opportunity-table");
+
+    table.innerHTML = `
+        <tr>
+            <td colspan="7" style="text-align:center;">
+                ⏳ X10 Engine scanning market...
+            </td>
+        </tr>
+    `;
+
+    try {
+
+        const response =
+            await fetch("/api/scan");
+
+        const result =
+            await response.json();
+
+        if (!response.ok || !result.success) {
+
+            table.innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align:center;color:#dc2626;">
+                        Scanner failed:
+                        ${result.message || "Unknown error"}
+                    </td>
+                </tr>
+            `;
+
+            return;
+        }
+
+        const stocks =
+            result.stocks || [];
+
+        if (stocks.length === 0) {
+
+            table.innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align:center;">
+                        No X10 opportunities found.
+                    </td>
+                </tr>
+            `;
+
+            return;
+        }
+
+        table.innerHTML = "";
+
+        stocks.forEach((stock, index) => {
+
+            const row =
+                document.createElement("tr");
+
+            const score =
+                Number(stock.x10_score || 0);
+
+            let scoreClass = "score-medium";
+
+            if (score >= 70) {
+
+                scoreClass = "score-high";
+
+            }
+
+            let signalClass = "";
+
+            if (stock.signal === "BUY") {
+
+                signalClass = "signal-buy";
+
+            } else if (stock.signal === "WATCH") {
+
+                signalClass = "signal-watch";
+
+            }
+
+            row.innerHTML = `
+
+                <td>
+                    ${index + 1}
+                </td>
+
+                <td class="stock-name">
+                    ${stock.name || stock.symbol || "—"}
+                </td>
+
+                <td>
+                    ₹${formatNumber(stock.price)}
+                </td>
+
+                <td class="score ${scoreClass}">
+                    ${score}
+                </td>
+
+                <td class="signal ${signalClass}">
+                    ${stock.signal || "AVOID"}
+                </td>
+
+                <td>
+                    ${stock.trend || "Neutral"}
+                </td>
+
+                <td>
+                    ${formatNumber(stock.volume_ratio)}x
+                </td>
+
+            `;
+
+            table.appendChild(row);
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            "X10 SCANNER ERROR:",
+            error
+        );
+
+        table.innerHTML = `
+            <tr>
+                <td colspan="7" style="text-align:center;color:#dc2626;">
+                    Unable to connect to X10 Scanner.
+                </td>
+            </tr>
+        `;
+
+    }
+
+}
+
+
+/* =========================
+   NUMBER FORMAT
+========================= */
+
+function formatNumber(value) {
+
+    const number =
+        Number(value);
+
+    if (!Number.isFinite(number)) {
+
+        return "—";
+
+    }
+
+    return number.toFixed(2);
+
+}
+
+
+/* =========================
+   START X10 SCANNER
+========================= */
+
+document.addEventListener(
+    "DOMContentLoaded",
+    function() {
+
+        loadX10Scanner();
+
+    }
+);
+    
 </script>
 
 
