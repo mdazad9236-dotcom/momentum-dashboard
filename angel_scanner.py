@@ -1,5 +1,5 @@
 import time
-
+from x10_engine import X10Engine
 from angel_service import AngelOneService
 from angel_instruments import AngelInstrumentManager
 from analysis import TechnicalAnalyzer
@@ -11,7 +11,7 @@ class AngelScanner:
 
         self.service = AngelOneService()
         self.instrument_manager = AngelInstrumentManager()
-
+        self.x10_engine = X10Engine()
         self.batch_size = batch_size
         self.delay = delay
 
@@ -45,10 +45,7 @@ class AngelScanner:
 
             analysis = analyzer.calculate()
 
-            technical_score = analysis.get(
-                "technical_score",
-                0
-            )
+            x10_result = self.x10_engine.analyze(analysis)
 
             # --------------------------------------------------
             # X10 SCORE
