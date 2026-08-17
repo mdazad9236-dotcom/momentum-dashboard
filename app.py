@@ -23,6 +23,7 @@ instrument_manager = AngelInstrumentManager()
 
 @app.route("/", methods=["GET"])
 def home():
+
     return render_template("index.html")
 
 
@@ -30,15 +31,22 @@ def home():
 # STOCK ANALYSIS
 # ============================================================
 
-@app.route("/api/analyze/<symbol>", methods=["GET"])
+@app.route(
+    "/api/analyze/<symbol>",
+    methods=["GET"]
+)
 def analyze_stock(symbol):
 
     try:
+
         symbol = symbol.upper().strip()
 
-        result = stock_service.get_stock_analysis(symbol)
+        result = stock_service.get_stock_analysis(
+            symbol
+        )
 
         if not result:
+
             return jsonify({
                 "success": False,
                 "message": "No analysis result returned."
@@ -48,7 +56,10 @@ def analyze_stock(symbol):
 
     except Exception as error:
 
-        print("STOCK ANALYSIS API ERROR:", error)
+        print(
+            "STOCK ANALYSIS API ERROR:",
+            error
+        )
 
         return jsonify({
             "success": False,
@@ -60,7 +71,10 @@ def analyze_stock(symbol):
 # ANGEL ONE LOGIN TEST
 # ============================================================
 
-@app.route("/api/angel-test", methods=["GET"])
+@app.route(
+    "/api/angel-test",
+    methods=["GET"]
+)
 def angel_test():
 
     try:
@@ -81,7 +95,10 @@ def angel_test():
 
     except Exception as error:
 
-        print("ANGEL LOGIN ERROR:", error)
+        print(
+            "ANGEL LOGIN ERROR:",
+            error
+        )
 
         return jsonify({
             "status": "failed",
@@ -93,7 +110,10 @@ def angel_test():
 # ANGEL ONE MARKET DATA TEST
 # ============================================================
 
-@app.route("/api/market-test", methods=["GET"])
+@app.route(
+    "/api/market-test",
+    methods=["GET"]
+)
 def market_test():
 
     try:
@@ -112,12 +132,17 @@ def market_test():
 
         return jsonify({
             "status": "success",
-            "message": "Angel One market-data service connected."
+            "message": (
+                "Angel One market-data service connected."
+            )
         })
 
     except Exception as error:
 
-        print("MARKET DATA TEST ERROR:", error)
+        print(
+            "MARKET DATA TEST ERROR:",
+            error
+        )
 
         return jsonify({
             "status": "failed",
@@ -129,7 +154,10 @@ def market_test():
 # ANGEL ONE LTP TEST
 # ============================================================
 
-@app.route("/api/ltp-test", methods=["GET"])
+@app.route(
+    "/api/ltp-test",
+    methods=["GET"]
+)
 def ltp_test():
 
     try:
@@ -152,7 +180,9 @@ def ltp_test():
 
             return jsonify({
                 "status": "failed",
-                "message": "Market data service is unavailable."
+                "message": (
+                    "Market data service is unavailable."
+                )
             }), 500
 
         data = market.get_ltp(
@@ -178,7 +208,10 @@ def ltp_test():
 
     except Exception as error:
 
-        print("LTP TEST ERROR:", error)
+        print(
+            "LTP TEST ERROR:",
+            error
+        )
 
         return jsonify({
             "status": "failed",
@@ -190,7 +223,10 @@ def ltp_test():
 # X10 MARKET SCANNER
 # ============================================================
 
-@app.route("/api/scan", methods=["GET"])
+@app.route(
+    "/api/scan",
+    methods=["GET"]
+)
 def scan():
 
     try:
@@ -208,7 +244,9 @@ def scan():
 
             return jsonify({
                 "success": False,
-                "message": "Scanner returned no result.",
+                "message": (
+                    "Scanner returned no result."
+                ),
                 "stocks": []
             }), 500
 
@@ -229,7 +267,10 @@ def scan():
         )
 
         # ----------------------------------------------------
-        # Keep only valid stock records
+        # CLEAN STOCK RESULTS
+        #
+        # IMPORTANT:
+        # Keep the X10 fields produced by AngelScanner.
         # ----------------------------------------------------
 
         clean_stocks = []
@@ -240,6 +281,11 @@ def scan():
                 continue
 
             clean_stocks.append({
+
+                # ------------------------------------------------
+                # IDENTIFICATION
+                # ------------------------------------------------
+
                 "symbol": stock.get(
                     "symbol",
                     ""
@@ -255,35 +301,231 @@ def scan():
                     ""
                 ),
 
-                "ltp": stock.get(
-                    "ltp",
+                # ------------------------------------------------
+                # PRICE
+                # ------------------------------------------------
+
+                "price": stock.get(
+                    "price",
                     0
                 ),
 
-                "open": stock.get(
-                    "open",
+                # ------------------------------------------------
+                # TECHNICAL SCORE
+                # ------------------------------------------------
+
+                "technical_score": stock.get(
+                    "technical_score",
                     0
                 ),
 
-                "high": stock.get(
-                    "high",
+                # ------------------------------------------------
+                # X10
+                # ------------------------------------------------
+
+                "x10_score": stock.get(
+                    "x10_score",
                     0
                 ),
 
-                "low": stock.get(
-                    "low",
+                "success_probability": stock.get(
+                    "success_probability",
                     0
                 ),
 
-                "close": stock.get(
-                    "close",
+                "signal": stock.get(
+                    "signal",
+                    "AVOID"
+                ),
+
+                # ------------------------------------------------
+                # TRADE PLAN
+                # ------------------------------------------------
+
+                "entry": stock.get(
+                    "entry",
+                    0
+                ),
+
+                "stop_loss": stock.get(
+                    "stop_loss",
+                    0
+                ),
+
+                "target": stock.get(
+                    "target",
+                    0
+                ),
+
+                "risk": stock.get(
+                    "risk",
+                    0
+                ),
+
+                "reward": stock.get(
+                    "reward",
+                    0
+                ),
+
+                "risk_reward": stock.get(
+                    "risk_reward",
+                    0
+                ),
+
+                # ------------------------------------------------
+                # TREND / MOMENTUM
+                # ------------------------------------------------
+
+                "trend": stock.get(
+                    "trend",
+                    "Neutral"
+                ),
+
+                "momentum": stock.get(
+                    "momentum",
+                    "Neutral"
+                ),
+
+                # ------------------------------------------------
+                # RSI
+                # ------------------------------------------------
+
+                "rsi": stock.get(
+                    "rsi",
+                    0
+                ),
+
+                # ------------------------------------------------
+                # EMA
+                # ------------------------------------------------
+
+                "ema20": stock.get(
+                    "ema20",
+                    0
+                ),
+
+                "ema50": stock.get(
+                    "ema50",
+                    0
+                ),
+
+                "ema200": stock.get(
+                    "ema200",
+                    0
+                ),
+
+                # ------------------------------------------------
+                # MACD
+                # ------------------------------------------------
+
+                "macd": stock.get(
+                    "macd",
+                    0
+                ),
+
+                "macd_signal": stock.get(
+                    "macd_signal",
+                    0
+                ),
+
+                "macd_histogram": stock.get(
+                    "macd_histogram",
+                    0
+                ),
+
+                # ------------------------------------------------
+                # ADX
+                # ------------------------------------------------
+
+                "adx": stock.get(
+                    "adx",
+                    0
+                ),
+
+                "plus_di": stock.get(
+                    "plus_di",
+                    0
+                ),
+
+                "minus_di": stock.get(
+                    "minus_di",
+                    0
+                ),
+
+                # ------------------------------------------------
+                # SUPPORT / RESISTANCE
+                # ------------------------------------------------
+
+                "support": stock.get(
+                    "support",
+                    0
+                ),
+
+                "resistance": stock.get(
+                    "resistance",
+                    0
+                ),
+
+                # ------------------------------------------------
+                # VOLUME
+                # ------------------------------------------------
+
+                "volume_ratio": stock.get(
+                    "volume_ratio",
+                    0
+                ),
+
+                # ------------------------------------------------
+                # ATR
+                # ------------------------------------------------
+
+                "atr": stock.get(
+                    "atr",
+                    0
+                ),
+
+                # ------------------------------------------------
+                # 52 WEEK RANGE
+                # ------------------------------------------------
+
+                "52_week_high": stock.get(
+                    "52_week_high",
+                    0
+                ),
+
+                "52_week_low": stock.get(
+                    "52_week_low",
                     0
                 )
             })
 
+        # ----------------------------------------------------
+        # RETURN COMPLETE X10 SCAN
+        # ----------------------------------------------------
+
         return jsonify({
+
             "success": True,
-            "count": len(clean_stocks),
+
+            "count": len(
+                clean_stocks
+            ),
+
+            "scanned": result.get(
+                "scanned",
+                0
+            ),
+
+            "successful": result.get(
+                "successful",
+                0
+            ),
+
+            "time_seconds": result.get(
+                "time_seconds",
+                0
+            ),
+
             "stocks": clean_stocks
         })
 
@@ -295,8 +537,13 @@ def scan():
         )
 
         return jsonify({
+
             "success": False,
-            "message": str(error),
+
+            "message": str(
+                error
+            ),
+
             "stocks": []
         }), 500
 
@@ -390,11 +637,19 @@ def instruments_endpoint():
 
             return jsonify(result), 500
 
-        stocks = instrument_manager.get_nse_equities()
+        stocks = (
+            instrument_manager
+            .get_nse_equities()
+        )
 
         return jsonify({
+
             "success": True,
-            "count": len(stocks),
+
+            "count": len(
+                stocks
+            ),
+
             "stocks": stocks
         })
 
@@ -406,8 +661,13 @@ def instruments_endpoint():
         )
 
         return jsonify({
+
             "success": False,
-            "message": str(error),
+
+            "message": str(
+                error
+            ),
+
             "stocks": []
         }), 500
 
@@ -430,14 +690,23 @@ def refresh_instruments_endpoint():
 
             return jsonify(result), 500
 
-        stocks = instrument_manager.get_nse_equities()
+        stocks = (
+            instrument_manager
+            .get_nse_equities()
+        )
 
         return jsonify({
+
             "success": True,
-            "count": len(stocks),
+
+            "count": len(
+                stocks
+            ),
+
             "message": (
                 "Angel One instrument master refreshed."
             ),
+
             "stocks": stocks
         })
 
@@ -449,8 +718,13 @@ def refresh_instruments_endpoint():
         )
 
         return jsonify({
+
             "success": False,
-            "message": str(error),
+
+            "message": str(
+                error
+            ),
+
             "stocks": []
         }), 500
 
@@ -476,12 +750,16 @@ def instrument_endpoint(symbol):
         if not stock:
 
             return jsonify({
+
                 "success": False,
+
                 "message": "Stock not found."
             }), 404
 
         return jsonify({
+
             "success": True,
+
             "stock": stock
         })
 
@@ -493,8 +771,12 @@ def instrument_endpoint(symbol):
         )
 
         return jsonify({
+
             "success": False,
-            "message": str(error)
+
+            "message": str(
+                error
+            )
         }), 500
 
 
