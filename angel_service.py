@@ -422,19 +422,18 @@ class AngelOneService:
                 "data": candles
             }
 
-        except Exception as error:
+                except Exception as error:
+
+            print(
+                f"Historical data error for {symbol}: {error}"
+            )
 
             return {
-
                 "success": False,
-
-                "message": str(
-                    error
-                ),
-
+                "message": f"Historical data request failed: {str(error)}",
                 "data": []
             }
-
+        
     # ==========================================================
     # HISTORICAL DATAFRAME
     # ==========================================================
@@ -443,7 +442,7 @@ class AngelOneService:
         self,
         symbol,
         token,
-        days=200,
+        days=100,
         interval="ONE_DAY",
         exchange="NSE"
     ):
