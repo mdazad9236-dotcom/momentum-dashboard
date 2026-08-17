@@ -1,7 +1,6 @@
-from angel_instruments import AngelInstrumentManager
-
-instrument_manager = AngelInstrumentManager()
 from flask import Flask, jsonify, render_template
+
+from angel_instruments import AngelInstrumentManager
 from angel_service import AngelOneService
 from stock_service import StockService
 from angel_scanner import AngelScanner
@@ -15,101 +14,48 @@ app = Flask(__name__)
 
 angel_service = AngelOneService()
 stock_service = StockService()
+instrument_manager = AngelInstrumentManager()
 
 
 # ============================================================
 # HOME
 # ============================================================
 
-@app.route("/")
+@app.route("/", methods=["GET"])
 def home():
-
     return render_template("index.html")
 
 
 # ============================================================
 # STOCK ANALYSIS
 # ============================================================
-# ============================================================
-# X10 MARKET SCANNER
-# ============================================================
 
-@app.route("/api/scan", methods=["GET"])
-def scan():
+@app.route("/api/analyze/<symbol>", methods=["GET"])
+def analyze_stock(symbol):
 
     try:
+        symbol = symbol.upper().strip()
 
-        scanner = AngelScanner(
-            batch_size=5,
-            delay=0.5
-        )
+        result = stock_service.get_stock_analysis(symbol)
 
-        result = scanner.scan_market(
-            limit=5
-        )
+        if not result:
+            return jsonify({
+                "success": False,
+                "message": "No analysis result returned."
+            }), 500
 
         return jsonify(result)
 
     except Exception as error:
 
-        return jsonify({
-            "success": False,
-            "message": str(error),
-            "stocks": []
-        }), 500
-
-        if not result.get("success"):
-
-            return jsonify({
-                "success": False,
-                "message": result.get(
-                    "message",
-                    "Angel One scanner failed."
-                ),
-                "stocks": []
-            }), 500
-
-        return jsonify({
-            "success": True,
-
-            "count": result.get(
-                "count",
-                0
-            ),
-
-            "scanned": result.get(
-                "scanned",
-                0
-            ),
-
-            "successful": result.get(
-                "successful",
-                0
-            ),
-
-            "time_seconds": result.get(
-                "time_seconds",
-                0
-            ),
-
-            "stocks": result.get(
-                "stocks",
-                []
-            )
-        })
-
-    except Exception as error:
-
-        print(
-            "X10 SCANNER API ERROR:",
-            error
-        )
+        print("STOCK ANALYSIS API ERROR:", error)
 
         return jsonify({
             "success": False,
-            "message": str(error),
-            "stocks": []
+            "message": str(error)
         }), 500
+
+
 # ============================================================
 # ANGEL ONE LOGIN TEST
 # ============================================================
@@ -134,6 +80,8 @@ def angel_test():
         }), 400
 
     except Exception as error:
+
+        print("ANGEL LOGIN ERROR:", error)
 
         return jsonify({
             "status": "failed",
@@ -169,6 +117,8 @@ def market_test():
 
     except Exception as error:
 
+        print("MARKET DATA TEST ERROR:", error)
+
         return jsonify({
             "status": "failed",
             "message": str(error)
@@ -190,10 +140,20 @@ def ltp_test():
 
             return jsonify({
                 "status": "failed",
-                "message": result.get("message")
+                "message": result.get(
+                    "message",
+                    "Market data service failed."
+                )
             }), 400
 
-        market = result["service"]
+        market = result.get("service")
+
+        if market is None:
+
+            return jsonify({
+                "status": "failed",
+                "message": "Market data service is unavailable."
+            }), 500
 
         data = market.get_ltp(
             exchange="NSE",
@@ -205,7 +165,10 @@ def ltp_test():
 
             return jsonify({
                 "status": "failed",
-                "message": data.get("message")
+                "message": data.get(
+                    "message",
+                    "Unable to fetch LTP."
+                )
             }), 400
 
         return jsonify({
@@ -215,6 +178,8 @@ def ltp_test():
 
     except Exception as error:
 
+        print("LTP TEST ERROR:", error)
+
         return jsonify({
             "status": "failed",
             "message": str(error)
@@ -222,16 +187,25 @@ def ltp_test():
 
 
 # ============================================================
-# MARKET SCANNER TEST
+# X10 MARKET SCANNER
 # ============================================================
 
+@app.route("/api/scan", methods=["GET"])
 def scan():
-    try:
-        scanner = AngelScanner()
 
-        result = scanner.scan_market()
+    try:
+
+        scanner = AngelScanner(
+            batch_size=5,
+            delay=0.5
+        )
+
+        result = scanner.scan_market(
+            limit=5
+        )
 
         if not result:
+
             return jsonify({
                 "success": False,
                 "message": "Scanner returned no result.",
@@ -239,6 +213,7 @@ def scan():
             }), 500
 
         if not result.get("success"):
+
             return jsonify({
                 "success": False,
                 "message": result.get(
@@ -248,24 +223,62 @@ def scan():
                 "stocks": []
             }), 500
 
-        stocks = result.get("stocks", [])
+        stocks = result.get(
+            "stocks",
+            []
+        )
 
+        # ----------------------------------------------------
         # Keep only valid stock records
+        # ----------------------------------------------------
+
         clean_stocks = []
 
         for stock in stocks:
+
             if not isinstance(stock, dict):
                 continue
 
             clean_stocks.append({
-                "symbol": stock.get("symbol", ""),
-                "name": stock.get("name", ""),
-                "token": stock.get("token", ""),
-                "ltp": stock.get("ltp", 0),
-                "open": stock.get("open", 0),
-                "high": stock.get("high", 0),
-                "low": stock.get("low", 0),
-                "close": stock.get("close", 0)
+                "symbol": stock.get(
+                    "symbol",
+                    ""
+                ),
+
+                "name": stock.get(
+                    "name",
+                    ""
+                ),
+
+                "token": stock.get(
+                    "token",
+                    ""
+                ),
+
+                "ltp": stock.get(
+                    "ltp",
+                    0
+                ),
+
+                "open": stock.get(
+                    "open",
+                    0
+                ),
+
+                "high": stock.get(
+                    "high",
+                    0
+                ),
+
+                "low": stock.get(
+                    "low",
+                    0
+                ),
+
+                "close": stock.get(
+                    "close",
+                    0
+                )
             })
 
         return jsonify({
@@ -276,7 +289,10 @@ def scan():
 
     except Exception as error:
 
-        print("SCAN API ERROR:", error)
+        print(
+            "X10 SCANNER API ERROR:",
+            error
+        )
 
         return jsonify({
             "success": False,
@@ -284,11 +300,15 @@ def scan():
             "stocks": []
         }), 500
 
+
 # ============================================================
 # HISTORICAL DATA
 # ============================================================
 
-@app.route("/api/historical/<symbol>", methods=["GET"])
+@app.route(
+    "/api/historical/<symbol>",
+    methods=["GET"]
+)
 def historical_endpoint(symbol):
 
     token_map = {
@@ -317,7 +337,7 @@ def historical_endpoint(symbol):
 
     try:
 
-        symbol = symbol.upper()
+        symbol = symbol.upper().strip()
 
         if symbol not in token_map:
 
@@ -341,6 +361,137 @@ def historical_endpoint(symbol):
 
     except Exception as error:
 
+        print(
+            "HISTORICAL DATA ERROR:",
+            error
+        )
+
+        return jsonify({
+            "success": False,
+            "message": str(error)
+        }), 500
+
+
+# ============================================================
+# INSTRUMENT MASTER
+# ============================================================
+
+@app.route(
+    "/api/instruments",
+    methods=["GET"]
+)
+def instruments_endpoint():
+
+    try:
+
+        result = instrument_manager.load_cache()
+
+        if not result.get("success"):
+
+            return jsonify(result), 500
+
+        stocks = instrument_manager.get_nse_equities()
+
+        return jsonify({
+            "success": True,
+            "count": len(stocks),
+            "stocks": stocks
+        })
+
+    except Exception as error:
+
+        print(
+            "INSTRUMENT API ERROR:",
+            error
+        )
+
+        return jsonify({
+            "success": False,
+            "message": str(error),
+            "stocks": []
+        }), 500
+
+
+# ============================================================
+# REFRESH INSTRUMENT MASTER
+# ============================================================
+
+@app.route(
+    "/api/instruments/refresh",
+    methods=["GET"]
+)
+def refresh_instruments_endpoint():
+
+    try:
+
+        result = instrument_manager.refresh()
+
+        if not result.get("success"):
+
+            return jsonify(result), 500
+
+        stocks = instrument_manager.get_nse_equities()
+
+        return jsonify({
+            "success": True,
+            "count": len(stocks),
+            "message": (
+                "Angel One instrument master refreshed."
+            ),
+            "stocks": stocks
+        })
+
+    except Exception as error:
+
+        print(
+            "INSTRUMENT REFRESH ERROR:",
+            error
+        )
+
+        return jsonify({
+            "success": False,
+            "message": str(error),
+            "stocks": []
+        }), 500
+
+
+# ============================================================
+# SINGLE INSTRUMENT
+# ============================================================
+
+@app.route(
+    "/api/instrument/<symbol>",
+    methods=["GET"]
+)
+def instrument_endpoint(symbol):
+
+    try:
+
+        symbol = symbol.upper().strip()
+
+        stock = instrument_manager.find_stock(
+            symbol
+        )
+
+        if not stock:
+
+            return jsonify({
+                "success": False,
+                "message": "Stock not found."
+            }), 404
+
+        return jsonify({
+            "success": True,
+            "stock": stock
+        })
+
+    except Exception as error:
+
+        print(
+            "SINGLE INSTRUMENT ERROR:",
+            error
+        )
+
         return jsonify({
             "success": False,
             "message": str(error)
@@ -357,53 +508,3 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=5000
     )
-@app.route("/api/instruments", methods=["GET"])
-def instruments_endpoint():
-
-    result = instrument_manager.load_cache()
-
-    if not result.get("success"):
-        return jsonify(result), 500
-
-    stocks = instrument_manager.get_nse_equities()
-
-    return jsonify({
-        "success": True,
-        "count": len(stocks),
-        "stocks": stocks
-    })
-
-
-@app.route("/api/instruments/refresh", methods=["GET"])
-def refresh_instruments_endpoint():
-
-    result = instrument_manager.refresh()
-
-    if not result.get("success"):
-        return jsonify(result), 500
-
-    stocks = instrument_manager.get_nse_equities()
-
-    return jsonify({
-        "success": True,
-        "count": len(stocks),
-        "message": "Angel One instrument master refreshed.",
-        "stocks": stocks
-    })
-
-
-@app.route("/api/instrument/<symbol>", methods=["GET"])
-def instrument_endpoint(symbol):
-
-    stock = instrument_manager.find_stock(symbol)
-
-    if not stock:
-        return jsonify({
-            "success": False,
-            "message": "Stock not found."
-        }), 404
-
-    return jsonify({
-        "success": True,
-        "stock": stock
-    })
