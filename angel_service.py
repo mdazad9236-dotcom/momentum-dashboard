@@ -308,124 +308,124 @@ class AngelOneService:
     # HISTORICAL DATA
     # ==========================================================
 
-   def get_historical_data(
-    self,
-    symbol,
-    token,
-    days=200,
-    interval="ONE_DAY",
-    exchange="NSE"
-):
+    def get_historical_data(
+        self,
+        symbol,
+        token,
+        days=200,
+        interval="ONE_DAY",
+        exchange="NSE"
+    ):
 
-    login_result = self.login()
+        login_result = self.login()
 
-    if not login_result.get("success"):
-
-        return {
-            "success": False,
-            "message": login_result.get(
-                "message",
-                "Angel One login failed."
-            ),
-            "data": []
-        }
-
-    try:
-
-        days = min(
-            int(days),
-            2000
-        )
-
-        to_date = datetime.now()
-
-        from_date = (
-            to_date -
-            timedelta(days=days)
-        )
-
-        params = {
-
-            "exchange": exchange,
-
-            "symboltoken": str(
-                token
-            ),
-
-            "interval": interval,
-
-            "fromdate": from_date.strftime(
-                "%Y-%m-%d %H:%M"
-            ),
-
-            "todate": to_date.strftime(
-                "%Y-%m-%d %H:%M"
-            )
-        }
-
-        response = self.smart_api.getCandleData(
-            params
-        )
-
-        if not response:
+        if not login_result.get("success"):
 
             return {
                 "success": False,
-                "message": (
-                    "Empty response from Angel One."
-                ),
-                "data": []
-            }
-
-        if not response.get("status"):
-
-            return {
-                "success": False,
-                "message": response.get(
+                "message": login_result.get(
                     "message",
-                    "Historical data request failed."
+                    "Angel One login failed."
                 ),
                 "data": []
             }
 
-        candles = response.get(
-            "data",
-            []
-        )
+        try:
 
-        if not candles:
+            days = min(
+                int(days),
+                2000
+            )
+
+            to_date = datetime.now()
+
+            from_date = (
+                to_date -
+                timedelta(days=days)
+            )
+
+            params = {
+
+                "exchange": exchange,
+
+                "symboltoken": str(
+                    token
+                ),
+
+                "interval": interval,
+
+                "fromdate": from_date.strftime(
+                    "%Y-%m-%d %H:%M"
+                ),
+
+                "todate": to_date.strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+            }
+
+            response = self.smart_api.getCandleData(
+                params
+            )
+
+            if not response:
+
+                return {
+                    "success": False,
+                    "message": (
+                        "Empty response from Angel One."
+                    ),
+                    "data": []
+                }
+
+            if not response.get("status"):
+
+                return {
+                    "success": False,
+                    "message": response.get(
+                        "message",
+                        "Historical data request failed."
+                    ),
+                    "data": []
+                }
+
+            candles = response.get(
+                "data",
+                []
+            )
+
+            if not candles:
+
+                return {
+                    "success": False,
+                    "message": (
+                        "No historical candles found."
+                    ),
+                    "data": []
+                }
+
+            return {
+                "success": True,
+                "symbol": symbol,
+                "token": str(token),
+                "interval": interval,
+                "count": len(candles),
+                "data": candles
+            }
+
+        except Exception as error:
+
+            print(
+                f"Historical data error for {symbol}: {error}"
+            )
 
             return {
                 "success": False,
                 "message": (
-                    "No historical candles found."
+                    f"Historical data request failed: {str(error)}"
                 ),
                 "data": []
             }
-
-        return {
-            "success": True,
-            "symbol": symbol,
-            "token": str(token),
-            "interval": interval,
-            "count": len(candles),
-            "data": candles
-        }
-
-    except Exception as error:
-
-        print(
-            f"Historical data error for {symbol}: {error}"
-        )
-
-        return {
-            "success": False,
-            "message": (
-                f"Historical data request failed: {str(error)}"
-            ),
-            "data": []
-        }
-            
+  
     # ==========================================================
     # HISTORICAL DATAFRAME
     # ==========================================================
