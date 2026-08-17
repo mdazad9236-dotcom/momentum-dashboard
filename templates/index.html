@@ -4,9 +4,14 @@
 <head>
 
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Market AI Dashboard</title>
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>X10 Market AI Dashboard</title>
+
 
     <style>
 
@@ -16,385 +21,644 @@
             padding: 0;
         }
 
+
         body {
-            font-family: Arial, Helvetica, sans-serif;
+
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
+
             background: #f3f6fa;
+
             color: #172033;
+
         }
+
 
         /* =========================
            HEADER
         ========================== */
 
         header {
+
             background: #101827;
+
             color: white;
+
             padding: 18px 30px;
+
             display: flex;
+
             justify-content: space-between;
+
             align-items: center;
+
             position: sticky;
+
             top: 0;
+
             z-index: 100;
+
         }
+
 
         .logo {
+
             font-size: 23px;
+
             font-weight: bold;
+
         }
+
 
         .logo span {
+
             color: #22c55e;
+
         }
 
+
         .market-status {
+
             font-size: 13px;
+
             color: #22c55e;
+
             font-weight: bold;
+
         }
+
 
         /* =========================
            MAIN
         ========================== */
 
         .container {
+
             max-width: 1400px;
+
             margin: auto;
+
             padding: 25px;
+
         }
+
 
         /* =========================
            INDEX CARDS
         ========================== */
 
         .indices {
+
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+
+            grid-template-columns:
+                repeat(4, 1fr);
+
             gap: 15px;
+
             margin-bottom: 25px;
+
         }
+
 
         .index-card {
+
             background: white;
+
             border-radius: 12px;
+
             padding: 20px;
-            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
+
+            box-shadow:
+                0 3px 12px
+                rgba(0,0,0,0.06);
+
         }
+
 
         .index-name {
+
             color: #667085;
+
             font-size: 14px;
+
             margin-bottom: 10px;
+
         }
+
 
         .index-value {
+
             font-size: 24px;
+
             font-weight: bold;
+
         }
+
 
         .positive {
+
             color: #16a34a;
+
         }
 
+
         .negative {
+
             color: #dc2626;
+
         }
+
 
         /* =========================
            SECTION
         ========================== */
 
         .section {
+
             margin-top: 25px;
+
         }
+
 
         .section-title {
+
             display: flex;
-            justify-content: space-between;
+
+            justify-content:
+                space-between;
+
             align-items: center;
+
             margin-bottom: 15px;
+
         }
+
 
         .section-title h2 {
+
             font-size: 21px;
+
         }
+
 
         .section-title span {
+
             color: #667085;
+
             font-size: 13px;
+
         }
 
-        /* =========================
-           SCAN CONTROLS
-        ========================== */
-
-        .scan-controls {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .scan-button {
-            border: none;
-            background: #2563eb;
-            color: white;
-            padding: 10px 18px;
-            border-radius: 8px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        .scan-button:hover {
-            background: #1d4ed8;
-        }
-
-        .scan-button:disabled {
-            background: #94a3b8;
-            cursor: not-allowed;
-        }
-
-        .scan-status {
-            color: #667085;
-            font-size: 13px;
-        }
 
         /* =========================
            OPPORTUNITY TABLE
         ========================== */
 
         .table-container {
+
             background: white;
+
             border-radius: 12px;
+
             overflow-x: auto;
-            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
+
+            box-shadow:
+                0 3px 12px
+                rgba(0,0,0,0.06);
+
         }
 
+
         table {
+
             width: 100%;
-            border-collapse: collapse;
-            min-width: 850px;
+
+            border-collapse:
+                collapse;
+
+            min-width: 1100px;
+
         }
+
 
         th,
         td {
-            padding: 15px;
+
+            padding: 14px 15px;
+
             text-align: left;
-            border-bottom: 1px solid #edf0f4;
+
+            border-bottom:
+                1px solid #edf0f4;
+
+            white-space: nowrap;
+
         }
+
 
         th {
+
             background: #f8fafc;
+
             font-size: 13px;
+
             color: #667085;
+
+            position: sticky;
+
+            top: 0;
+
         }
+
 
         td {
+
             font-size: 14px;
+
         }
+
 
         .stock-name {
+
             font-weight: bold;
+
         }
+
 
         .score {
+
             font-weight: bold;
+
             font-size: 16px;
+
         }
+
 
         .score-high {
+
             color: #16a34a;
+
         }
+
 
         .score-medium {
+
             color: #ca8a04;
+
         }
+
 
         .score-low {
+
             color: #dc2626;
+
         }
+
 
         .signal {
+
             font-weight: bold;
+
         }
+
 
         .signal-buy {
+
             color: #16a34a;
+
         }
+
 
         .signal-watch {
+
             color: #ca8a04;
+
         }
+
 
         .signal-neutral {
+
             color: #667085;
+
         }
+
 
         .signal-avoid {
+
             color: #dc2626;
+
         }
 
-        .scanner-loading {
-            text-align: center;
-            padding: 30px;
+
+        .trade-entry {
+
+            font-weight: bold;
+
             color: #2563eb;
-            font-weight: bold;
+
         }
 
-        .scanner-error {
-            text-align: center;
-            padding: 25px;
+
+        .trade-stop {
+
+            font-weight: bold;
+
             color: #dc2626;
-            font-weight: bold;
+
         }
 
-        .scanner-empty {
-            text-align: center;
-            padding: 25px;
-            color: #667085;
+
+        .trade-target {
+
+            font-weight: bold;
+
+            color: #16a34a;
+
         }
+
+
+        .risk-reward {
+
+            font-weight: bold;
+
+        }
+
+
+        .scanner-status {
+
+            margin-top: 10px;
+
+            font-size: 13px;
+
+            color: #667085;
+
+        }
+
 
         /* =========================
            SEARCH
         ========================== */
 
         .search-panel {
+
             background: white;
+
             padding: 22px;
+
             border-radius: 12px;
-            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
+
+            box-shadow:
+                0 3px 12px
+                rgba(0,0,0,0.06);
+
         }
+
 
         .search-box {
+
             display: flex;
+
             gap: 10px;
+
         }
+
 
         .search-box input {
+
             flex: 1;
+
             padding: 14px;
-            border: 1px solid #d0d5dd;
+
+            border:
+                1px solid #d0d5dd;
+
             border-radius: 8px;
+
             font-size: 15px;
+
         }
+
 
         .search-box button {
+
             padding: 14px 25px;
+
             border: none;
+
             border-radius: 8px;
+
             background: #2563eb;
+
             color: white;
+
             font-weight: bold;
+
             cursor: pointer;
+
         }
 
+
         .search-box button:hover {
+
             background: #1d4ed8;
+
         }
+
 
         /* =========================
            SCANNER CARDS
         ========================== */
 
         .scanner-grid {
+
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+
+            grid-template-columns:
+                repeat(4, 1fr);
+
             gap: 15px;
+
         }
+
 
         .scanner-card {
+
             background: white;
+
             padding: 20px;
+
             border-radius: 12px;
-            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
+
+            box-shadow:
+                0 3px 12px
+                rgba(0,0,0,0.06);
+
             cursor: pointer;
+
             transition: 0.2s;
+
         }
+
 
         .scanner-card:hover {
-            transform: translateY(-3px);
+
+            transform:
+                translateY(-3px);
+
         }
+
 
         .scanner-icon {
+
             font-size: 27px;
+
             margin-bottom: 10px;
+
         }
+
 
         .scanner-card h3 {
+
             margin-bottom: 6px;
+
         }
 
+
         .scanner-card p {
+
             color: #667085;
+
             font-size: 13px;
+
         }
+
 
         /* =========================
            ANALYSIS
         ========================== */
 
         #analysis-section {
+
             display: none;
+
         }
+
 
         .analysis-header {
+
             background: white;
+
             padding: 25px;
+
             border-radius: 12px;
-            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
+
+            box-shadow:
+                0 3px 12px
+                rgba(0,0,0,0.06);
+
         }
+
 
         .analysis-grid {
+
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+
+            grid-template-columns:
+                repeat(4, 1fr);
+
             gap: 15px;
+
             margin-top: 15px;
+
         }
+
 
         .metric {
+
             background: white;
+
             padding: 20px;
+
             border-radius: 12px;
-            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.06);
+
+            box-shadow:
+                0 3px 12px
+                rgba(0,0,0,0.06);
+
         }
+
 
         .metric-label {
+
             color: #667085;
+
             font-size: 13px;
+
             margin-bottom: 8px;
+
         }
+
 
         .metric-value {
+
             font-size: 22px;
+
             font-weight: bold;
+
         }
+
 
         .loading {
+
             display: none;
+
             margin-top: 15px;
+
             color: #2563eb;
+
             font-weight: bold;
+
         }
 
+
         .error {
+
             display: none;
+
             margin-top: 15px;
+
             background: #fee2e2;
+
             color: #991b1b;
+
             padding: 15px;
+
             border-radius: 8px;
+
         }
+
 
         /* =========================
            FOOTER
         ========================== */
 
         footer {
+
             margin-top: 50px;
+
             padding: 25px;
+
             text-align: center;
+
             color: #667085;
+
             font-size: 13px;
+
         }
+
 
         /* =========================
            MOBILE
@@ -404,48 +668,59 @@
 
             .indices,
             .scanner-grid {
-                grid-template-columns: repeat(2, 1fr);
+
+                grid-template-columns:
+                    repeat(2, 1fr);
+
             }
 
+
             .analysis-grid {
-                grid-template-columns: repeat(2, 1fr);
+
+                grid-template-columns:
+                    repeat(2, 1fr);
+
             }
 
         }
 
+
         @media (max-width: 600px) {
 
             header {
+
                 padding: 15px;
+
             }
 
+
             .container {
+
                 padding: 15px;
+
             }
+
 
             .indices,
             .scanner-grid,
             .analysis-grid {
+
                 grid-template-columns: 1fr;
+
             }
+
 
             .search-box {
+
                 flex-direction: column;
+
             }
+
 
             .search-box button {
-                width: 100%;
-            }
 
-            .section-title {
-                align-items: flex-start;
-                gap: 10px;
-                flex-direction: column;
-            }
-
-            .scan-controls {
                 width: 100%;
-                justify-content: space-between;
+
             }
 
         }
@@ -461,14 +736,19 @@
 <header>
 
     <div class="logo">
-        📈 Market<span>AI</span>
+
+        📈 X10<span>MarketAI</span>
+
     </div>
 
+
     <div
-        id="market-status"
+        id="system-status"
         class="market-status"
     >
+
         ● SYSTEM ONLINE
+
     </div>
 
 </header>
@@ -482,6 +762,7 @@
     ========================== -->
 
     <div class="indices">
+
 
         <div class="index-card">
 
@@ -550,6 +831,7 @@
 
         </div>
 
+
     </div>
 
 
@@ -559,78 +841,169 @@
 
     <div class="section">
 
+
         <div class="section-title">
 
             <h2>
                 🔥 Top X10 Opportunities
             </h2>
 
-            <div class="scan-controls">
-
-                <span
-                    id="scan-status"
-                    class="scan-status"
-                >
-                    Preparing scanner...
-                </span>
-
-                <button
-                    id="scan-button"
-                    class="scan-button"
-                    onclick="runX10Scan()"
-                >
-                    RUN X10 SCAN
-                </button>
-
-            </div>
+            <span>
+                X10 Engine
+            </span>
 
         </div>
 
 
         <div class="table-container">
 
+
             <table>
+
 
                 <thead>
 
                     <tr>
 
-                        <th>Rank</th>
+                        <th>
+                            Rank
+                        </th>
 
-                        <th>Stock</th>
+                        <th>
+                            Stock
+                        </th>
 
-                        <th>Price</th>
+                        <th>
+                            Price
+                        </th>
 
-                        <th>X10 Score</th>
+                        <th>
+                            X10 Score
+                        </th>
 
-                        <th>Signal</th>
+                        <th>
+                            Signal
+                        </th>
 
-                        <th>Trend</th>
+                        <th>
+                            Trend
+                        </th>
 
-                        <th>Volume</th>
+                        <th>
+                            Entry
+                        </th>
+
+                        <th>
+                            Stop Loss
+                        </th>
+
+                        <th>
+                            Target
+                        </th>
+
+                        <th>
+                            Risk
+                        </th>
+
+                        <th>
+                            Reward
+                        </th>
+
+                        <th>
+                            R:R
+                        </th>
+
+                        <th>
+                            Volume
+                        </th>
 
                     </tr>
 
                 </thead>
 
 
-                <tbody id="opportunity-table">
+                <tbody
+                    id="opportunity-table"
+                >
 
                     <tr>
 
-                        <td colspan="7">
-                            <div class="scanner-loading">
-                                ⏳ X10 scanner starting...
-                            </div>
+                        <td>
+                            —
+                        </td>
+
+                        <td
+                            class="stock-name"
+                        >
+                            X10 Scanner starting...
+                        </td>
+
+                        <td>
+                            —
+                        </td>
+
+                        <td
+                            class="score"
+                        >
+                            —
+                        </td>
+
+                        <td>
+                            Waiting
+                        </td>
+
+                        <td>
+                            —
+                        </td>
+
+                        <td>
+                            —
+                        </td>
+
+                        <td>
+                            —
+                        </td>
+
+                        <td>
+                            —
+                        </td>
+
+                        <td>
+                            —
+                        </td>
+
+                        <td>
+                            —
+                        </td>
+
+                        <td>
+                            —
+                        </td>
+
+                        <td>
+                            —
                         </td>
 
                     </tr>
 
                 </tbody>
 
+
             </table>
 
+
         </div>
+
+
+        <div
+            id="scanner-status"
+            class="scanner-status"
+        >
+
+            ⏳ X10 Engine is preparing the market scan...
+
+        </div>
+
 
     </div>
 
@@ -640,6 +1013,7 @@
     ========================== -->
 
     <div class="section">
+
 
         <div class="section-title">
 
@@ -652,7 +1026,9 @@
 
         <div class="search-panel">
 
+
             <div class="search-box">
+
 
                 <input
                     id="symbol"
@@ -660,9 +1036,15 @@
                     placeholder="Enter NSE symbol e.g. RELIANCE"
                 >
 
-                <button onclick="analyzeStock()">
+
+                <button
+                    onclick="analyzeStock()"
+                >
+
                     ANALYZE
+
                 </button>
+
 
             </div>
 
@@ -671,7 +1053,9 @@
                 id="loading"
                 class="loading"
             >
+
                 ⏳ Fetching market data...
+
             </div>
 
 
@@ -680,7 +1064,9 @@
                 class="error"
             ></div>
 
+
         </div>
+
 
     </div>
 
@@ -690,6 +1076,7 @@
     ========================== -->
 
     <div class="section">
+
 
         <div class="section-title">
 
@@ -786,6 +1173,7 @@
 
             </div>
 
+
         </div>
 
     </div>
@@ -800,6 +1188,7 @@
         class="section"
     >
 
+
         <div class="section-title">
 
             <h2>
@@ -811,13 +1200,16 @@
 
         <div class="analysis-header">
 
+
             <h2 id="company">
                 —
             </h2>
 
+
             <p id="stock-info">
                 —
             </p>
+
 
         </div>
 
@@ -827,6 +1219,7 @@
             class="analysis-grid"
         ></div>
 
+
     </div>
 
 
@@ -835,9 +1228,11 @@
 
 <footer>
 
-    MarketAI — Technical analysis and market intelligence platform.
+    X10 MarketAI —
+    Technical analysis and market intelligence platform.
 
-    <br><br>
+    <br>
+    <br>
 
     ⚠️ Analysis is informational and is not guaranteed investment advice.
 
@@ -847,357 +1242,16 @@
 <script>
 
 
-/* =========================================================
-   X10 MARKET SCANNER
-========================================================= */
-
-
-async function runX10Scan() {
-
-    const table =
-        document.getElementById(
-            "opportunity-table"
-        );
-
-    const button =
-        document.getElementById(
-            "scan-button"
-        );
-
-    const status =
-        document.getElementById(
-            "scan-status"
-        );
-
-    const marketStatus =
-        document.getElementById(
-            "market-status"
-        );
-
-
-    /* -----------------------------------------------------
-       UI: SCAN START
-    ----------------------------------------------------- */
-
-    button.disabled = true;
-
-    button.textContent =
-        "SCANNING...";
-
-    status.textContent =
-        "X10 engine analyzing stocks...";
-
-    marketStatus.textContent =
-        "● X10 SCANNER ACTIVE";
-
-
-    table.innerHTML = `
-
-        <tr>
-
-            <td colspan="7">
-
-                <div class="scanner-loading">
-
-                    ⏳ Fetching Angel One market data...<br><br>
-
-                    X10 Engine is analyzing the market.
-
-                </div>
-
-            </td>
-
-        </tr>
-
-    `;
-
-
-    try {
-
-        const response =
-            await fetch(
-                "/api/scan",
-                {
-                    method: "GET",
-                    cache: "no-store"
-                }
-            );
-
-
-        const result =
-            await response.json();
-
-
-        /* -------------------------------------------------
-           SERVER ERROR
-        ------------------------------------------------- */
-
-        if (
-            !response.ok ||
-            !result.success
-        ) {
-
-            throw new Error(
-                result.message ||
-                "X10 scanner failed."
-            );
-
-        }
-
-
-        const stocks =
-            Array.isArray(result.stocks)
-                ? result.stocks
-                : [];
-
-
-        /* -------------------------------------------------
-           NO RESULTS
-        ------------------------------------------------- */
-
-        if (
-            stocks.length === 0
-        ) {
-
-            table.innerHTML = `
-
-                <tr>
-
-                    <td colspan="7">
-
-                        <div class="scanner-empty">
-
-                            No qualifying stocks found.
-
-                        </div>
-
-                    </td>
-
-                </tr>
-
-            `;
-
-            status.textContent =
-                "Scan completed — no results.";
-
-            return;
-
-        }
-
-
-        /* -------------------------------------------------
-           DISPLAY RESULTS
-        ------------------------------------------------- */
-
-        table.innerHTML = "";
-
-
-        stocks.forEach(
-            function(stock, index) {
-
-                const row =
-                    document.createElement("tr");
-
-
-                const score =
-                    Number(
-                        stock.x10_score || 0
-                    );
-
-
-                let scoreClass =
-                    "score-low";
-
-
-                if (
-                    score >= 70
-                ) {
-
-                    scoreClass =
-                        "score-high";
-
-                }
-                else if (
-                    score >= 55
-                ) {
-
-                    scoreClass =
-                        "score-medium";
-
-                }
-
-
-                const signal =
-                    String(
-                        stock.signal ||
-                        "AVOID"
-                    ).toUpperCase();
-
-
-                let signalClass =
-                    "signal-neutral";
-
-
-                if (
-                    signal === "BUY"
-                ) {
-
-                    signalClass =
-                        "signal-buy";
-
-                }
-                else if (
-                    signal === "WATCH"
-                ) {
-
-                    signalClass =
-                        "signal-watch";
-
-                }
-                else if (
-                    signal === "AVOID"
-                ) {
-
-                    signalClass =
-                        "signal-avoid";
-
-                }
-
-
-                const price =
-                    formatNumber(
-                        stock.price
-                    );
-
-
-                const volume =
-                    formatNumber(
-                        stock.volume_ratio
-                    );
-
-
-                row.innerHTML = `
-
-                    <td>
-                        ${index + 1}
-                    </td>
-
-                    <td class="stock-name">
-                        ${escapeHtml(
-                            stock.name ||
-                            stock.symbol ||
-                            "Unknown"
-                        )}
-                    </td>
-
-                    <td>
-                        ₹${price}
-                    </td>
-
-                    <td class="score ${scoreClass}">
-                        ${score}
-                    </td>
-
-                    <td class="signal ${signalClass}">
-                        ${escapeHtml(signal)}
-                    </td>
-
-                    <td>
-                        ${escapeHtml(
-                            stock.trend ||
-                            "Neutral"
-                        )}
-                    </td>
-
-                    <td>
-                        ${volume}
-                    </td>
-
-                `;
-
-
-                table.appendChild(row);
-
-            }
-        );
-
-
-        /* -------------------------------------------------
-           SCAN SUMMARY
-        ------------------------------------------------- */
-
-        status.textContent =
-            `Completed: ${stocks.length} opportunities | ` +
-            `Scanned: ${result.scanned || 0} stocks | ` +
-            `Time: ${result.time_seconds || 0}s`;
-
-
-    }
-    catch (error) {
-
-        console.error(
-            "X10 SCAN ERROR:",
-            error
-        );
-
-
-        table.innerHTML = `
-
-            <tr>
-
-                <td colspan="7">
-
-                    <div class="scanner-error">
-
-                        ❌ X10 scanner failed.
-
-                        <br><br>
-
-                        ${escapeHtml(
-                            error.message ||
-                            "Unable to connect to scanner."
-                        )}
-
-                    </div>
-
-                </td>
-
-            </tr>
-
-        `;
-
-
-        status.textContent =
-            "Scanner error.";
-
-
-    }
-    finally {
-
-        button.disabled = false;
-
-        button.textContent =
-            "RUN X10 SCAN";
-
-        marketStatus.textContent =
-            "● SYSTEM ONLINE";
-
-    }
-
-}
-
-
-/* =========================================================
+/* =========================
    STOCK ANALYSIS
-========================================================= */
+========================= */
 
 
 async function analyzeStock() {
 
+
     const symbolInput =
-        document.getElementById(
-            "symbol"
-        );
+        document.getElementById("symbol");
 
 
     const symbol =
@@ -1207,15 +1261,11 @@ async function analyzeStock() {
 
 
     const loading =
-        document.getElementById(
-            "loading"
-        );
+        document.getElementById("loading");
 
 
     const error =
-        document.getElementById(
-            "error"
-        );
+        document.getElementById("error");
 
 
     const section =
@@ -1244,11 +1294,14 @@ async function analyzeStock() {
 
     if (!symbol) {
 
+
         error.textContent =
             "Please enter a stock symbol.";
 
+
         error.style.display =
             "block";
+
 
         return;
 
@@ -1261,13 +1314,10 @@ async function analyzeStock() {
 
     try {
 
+
         const response =
             await fetch(
-                `/api/analyze/${encodeURIComponent(symbol)}`,
-                {
-                    method: "GET",
-                    cache: "no-store"
-                }
+                `/api/analyze/${encodeURIComponent(symbol)}`
             );
 
 
@@ -1284,12 +1334,15 @@ async function analyzeStock() {
             result.status !== "success"
         ) {
 
+
             error.textContent =
                 result.message ||
                 "Unable to fetch stock data.";
 
+
             error.style.display =
                 "block";
+
 
             return;
 
@@ -1297,7 +1350,7 @@ async function analyzeStock() {
 
 
         const data =
-            result.data || {};
+            result.data;
 
 
         document
@@ -1324,79 +1377,85 @@ async function analyzeStock() {
             data.analysis || {};
 
 
-        Object.entries(
-            analysis
-        ).forEach(
-            ([key, value]) => {
+        Object.entries(analysis)
+            .forEach(
+                ([key, value]) => {
 
 
-                const card =
-                    document.createElement(
-                        "div"
+                    const card =
+                        document.createElement(
+                            "div"
+                        );
+
+
+                    card.className =
+                        "metric";
+
+
+                    const label =
+                        document.createElement(
+                            "div"
+                        );
+
+
+                    label.className =
+                        "metric-label";
+
+
+                    label.textContent =
+                        formatKey(key);
+
+
+                    const valueElement =
+                        document.createElement(
+                            "div"
+                        );
+
+
+                    valueElement.className =
+                        "metric-value";
+
+
+                    if (
+                        typeof value ===
+                            "object" &&
+                        value !== null
+                    ) {
+
+
+                        valueElement.textContent =
+                            JSON.stringify(
+                                value
+                            );
+
+
+                    } else {
+
+
+                        valueElement.textContent =
+                            value ??
+                            "N/A";
+
+                    }
+
+
+                    card.appendChild(
+                        label
                     );
 
 
-                card.className =
-                    "metric";
-
-
-                const label =
-                    document.createElement(
-                        "div"
+                    card.appendChild(
+                        valueElement
                     );
 
 
-                label.className =
-                    "metric-label";
-
-
-                label.textContent =
-                    formatKey(key);
-
-
-                const valueElement =
-                    document.createElement(
-                        "div"
+                    grid.appendChild(
+                        card
                     );
 
-
-                valueElement.className =
-                    "metric-value";
-
-
-                if (
-                    typeof value === "object" &&
-                    value !== null
-                ) {
-
-                    valueElement.textContent =
-                        JSON.stringify(value);
 
                 }
-                else {
-
-                    valueElement.textContent =
-                        value ?? "N/A";
-
-                }
-
-
-                card.appendChild(
-                    label
-                );
-
-
-                card.appendChild(
-                    valueElement
-                );
-
-
-                grid.appendChild(
-                    card
-                );
-
-            }
-        );
+            );
 
 
         section.style.display =
@@ -1408,8 +1467,8 @@ async function analyzeStock() {
         });
 
 
-    }
-    catch (errorObject) {
+    } catch (errorObject) {
+
 
         loading.style.display =
             "none";
@@ -1432,18 +1491,21 @@ async function analyzeStock() {
 }
 
 
-/* =========================================================
+/* =========================
    FORMAT ANALYSIS LABEL
-========================================================= */
+========================= */
 
 
 function formatKey(key) {
 
+
     return String(key)
+
         .replace(
             /_/g,
             " "
         )
+
         .replace(
             /\b\w/g,
             letter =>
@@ -1453,12 +1515,13 @@ function formatKey(key) {
 }
 
 
-/* =========================================================
-   NUMBER FORMATTER
-========================================================= */
+/* =========================
+   FORMAT NUMBER
+========================= */
 
 
 function formatNumber(value) {
+
 
     const number =
         Number(value);
@@ -1468,7 +1531,7 @@ function formatNumber(value) {
         !Number.isFinite(number)
     ) {
 
-        return "0";
+        return "—";
 
     }
 
@@ -1478,55 +1541,483 @@ function formatNumber(value) {
 }
 
 
-/* =========================================================
-   HTML ESCAPE
-========================================================= */
+/* =========================
+   X10 SIGNAL CLASS
+========================= */
 
 
-function escapeHtml(value) {
+function getSignalClass(signal) {
 
-    return String(value)
-        .replace(
-            /&/g,
-            "&amp;"
-        )
-        .replace(
-            /</g,
-            "&lt;"
-        )
-        .replace(
-            />/g,
-            "&gt;"
-        )
-        .replace(
-            /"/g,
-            "&quot;"
-        )
-        .replace(
-            /'/g,
-            "&#039;"
-        );
+
+    const value =
+        String(
+            signal || ""
+        ).toUpperCase();
+
+
+    if (value === "BUY") {
+
+        return "signal-buy";
+
+    }
+
+
+    if (value === "WATCH") {
+
+        return "signal-watch";
+
+    }
+
+
+    if (value === "NEUTRAL") {
+
+        return "signal-neutral";
+
+    }
+
+
+    return "signal-avoid";
 
 }
 
 
-/* =========================================================
+/* =========================
+   X10 SCORE CLASS
+========================= */
+
+
+function getScoreClass(score) {
+
+
+    const number =
+        Number(score || 0);
+
+
+    if (number >= 70) {
+
+        return "score-high";
+
+    }
+
+
+    if (number >= 50) {
+
+        return "score-medium";
+
+    }
+
+
+    return "score-low";
+
+}
+
+
+/* =========================
+   X10 MARKET SCANNER
+========================= */
+
+
+async function loadX10Scanner() {
+
+
+    const table =
+        document.getElementById(
+            "opportunity-table"
+        );
+
+
+    const status =
+        document.getElementById(
+            "scanner-status"
+        );
+
+
+    const systemStatus =
+        document.getElementById(
+            "system-status"
+        );
+
+
+    table.innerHTML = `
+
+        <tr>
+
+            <td
+                colspan="13"
+                style="text-align:center;"
+            >
+
+                ⏳ X10 Engine scanning market...
+
+            </td>
+
+        </tr>
+
+    `;
+
+
+    status.textContent =
+        "⏳ X10 Engine is scanning the market...";
+
+
+    try {
+
+
+        const response =
+            await fetch(
+                "/api/scan"
+            );
+
+
+        const result =
+            await response.json();
+
+
+        if (
+            !response.ok ||
+            !result.success
+        ) {
+
+
+            table.innerHTML = `
+
+                <tr>
+
+                    <td
+                        colspan="13"
+                        style="
+                            text-align:center;
+                            color:#dc2626;
+                        "
+                    >
+
+                        Scanner failed:
+                        ${
+                            result.message ||
+                            "Unknown error"
+                        }
+
+                    </td>
+
+                </tr>
+
+            `;
+
+
+            status.textContent =
+                "❌ X10 Scanner failed.";
+
+
+            systemStatus.textContent =
+                "● SCANNER ERROR";
+
+
+            systemStatus.style.color =
+                "#dc2626";
+
+
+            return;
+
+        }
+
+
+        const stocks =
+            result.stocks || [];
+
+
+        if (
+            stocks.length === 0
+        ) {
+
+
+            table.innerHTML = `
+
+                <tr>
+
+                    <td
+                        colspan="13"
+                        style="text-align:center;"
+                    >
+
+                        No X10 opportunities found.
+
+                    </td>
+
+                </tr>
+
+            `;
+
+
+            status.textContent =
+                "No qualifying X10 opportunities found.";
+
+
+            return;
+
+        }
+
+
+        table.innerHTML =
+            "";
+
+
+        stocks.forEach(
+            (stock, index) => {
+
+
+                const row =
+                    document.createElement(
+                        "tr"
+                    );
+
+
+                const score =
+                    Number(
+                        stock.x10_score || 0
+                    );
+
+
+                const signal =
+                    stock.signal ||
+                    "AVOID";
+
+
+                const signalClass =
+                    getSignalClass(
+                        signal
+                    );
+
+
+                const scoreClass =
+                    getScoreClass(
+                        score
+                    );
+
+
+                row.innerHTML = `
+
+
+                    <td>
+                        ${index + 1}
+                    </td>
+
+
+                    <td class="stock-name">
+                        ${
+                            stock.name ||
+                            stock.symbol ||
+                            "—"
+                        }
+                    </td>
+
+
+                    <td>
+                        ₹${
+                            formatNumber(
+                                stock.price
+                            )
+                        }
+                    </td>
+
+
+                    <td
+                        class="score ${scoreClass}"
+                    >
+                        ${score}
+                    </td>
+
+
+                    <td
+                        class="
+                            signal
+                            ${signalClass}
+                        "
+                    >
+                        ${signal}
+                    </td>
+
+
+                    <td>
+                        ${
+                            stock.trend ||
+                            "Neutral"
+                        }
+                    </td>
+
+
+                    <td
+                        class="trade-entry"
+                    >
+                        ₹${
+                            formatNumber(
+                                stock.entry
+                            )
+                        }
+                    </td>
+
+
+                    <td
+                        class="trade-stop"
+                    >
+                        ₹${
+                            formatNumber(
+                                stock.stop_loss
+                            )
+                        }
+                    </td>
+
+
+                    <td
+                        class="trade-target"
+                    >
+                        ₹${
+                            formatNumber(
+                                stock.target
+                            )
+                        }
+                    </td>
+
+
+                    <td>
+                        ₹${
+                            formatNumber(
+                                stock.risk
+                            )
+                        }
+                    </td>
+
+
+                    <td>
+                        ₹${
+                            formatNumber(
+                                stock.reward
+                            )
+                        }
+                    </td>
+
+
+                    <td
+                        class="risk-reward"
+                    >
+                        ${
+                            formatNumber(
+                                stock.risk_reward
+                            )
+                        }
+                    </td>
+
+
+                    <td>
+                        ${
+                            formatNumber(
+                                stock.volume_ratio
+                            )
+                        }x
+                    </td>
+
+
+                `;
+
+
+                table.appendChild(
+                    row
+                );
+
+
+            }
+        );
+
+
+        status.textContent =
+            `✅ X10 scan completed • ` +
+            `Scanned: ${
+                result.scanned || 0
+            } • ` +
+            `Successful: ${
+                result.successful || 0
+            } • ` +
+            `Showing: ${
+                stocks.length
+            } stocks • ` +
+            `Time: ${
+                formatNumber(
+                    result.time_seconds
+                )
+            }s`;
+
+
+        systemStatus.textContent =
+            "● X10 ENGINE ONLINE";
+
+
+        systemStatus.style.color =
+            "#22c55e";
+
+
+    } catch (error) {
+
+
+        console.error(
+            "X10 SCANNER ERROR:",
+            error
+        );
+
+
+        table.innerHTML = `
+
+            <tr>
+
+                <td
+                    colspan="13"
+                    style="
+                        text-align:center;
+                        color:#dc2626;
+                    "
+                >
+
+                    Unable to connect to X10 Scanner.
+
+                </td>
+
+            </tr>
+
+        `;
+
+
+        status.textContent =
+            "❌ Unable to connect to X10 Scanner.";
+
+
+        systemStatus.textContent =
+            "● CONNECTION ERROR";
+
+
+        systemStatus.style.color =
+            "#dc2626";
+
+    }
+
+}
+
+
+/* =========================
    SCANNER PLACEHOLDER
-========================================================= */
+========================= */
 
 
 function scannerMessage(type) {
 
+
     alert(
-        `${type} scanner will be connected to the X10 engine in a later stage.`
+        `${type} scanner will be connected to the Auto Analyzer in the next stage.`
     );
 
 }
 
 
-/* =========================================================
+/* =========================
    ENTER KEY
-========================================================= */
+========================= */
 
 
 document
@@ -1535,9 +2026,11 @@ document
         "keypress",
         function(event) {
 
+
             if (
                 event.key === "Enter"
             ) {
+
 
                 analyzeStock();
 
@@ -1547,193 +2040,10 @@ document
     );
 
 
-/* =========================================================
-   START X10 SCANNER
-========================================================= */
-
-
-/*
-   The homepage performs ONE scan when loaded.
-
-   We intentionally do NOT create an automatic
-   repeating interval because /api/scan performs
-   real Angel One historical-data requests.
-*/
-
-
-window.addEventListener(
-    "load",
-    function() {
-
-        runX10Scan();
-
-    }
-);
-
-/* =========================
-   X10 MARKET SCANNER
-========================= */
-
-async function loadX10Scanner() {
-
-    const table =
-        document.getElementById("opportunity-table");
-
-    table.innerHTML = `
-        <tr>
-            <td colspan="7" style="text-align:center;">
-                ⏳ X10 Engine scanning market...
-            </td>
-        </tr>
-    `;
-
-    try {
-
-        const response =
-            await fetch("/api/scan");
-
-        const result =
-            await response.json();
-
-        if (!response.ok || !result.success) {
-
-            table.innerHTML = `
-                <tr>
-                    <td colspan="7" style="text-align:center;color:#dc2626;">
-                        Scanner failed:
-                        ${result.message || "Unknown error"}
-                    </td>
-                </tr>
-            `;
-
-            return;
-        }
-
-        const stocks =
-            result.stocks || [];
-
-        if (stocks.length === 0) {
-
-            table.innerHTML = `
-                <tr>
-                    <td colspan="7" style="text-align:center;">
-                        No X10 opportunities found.
-                    </td>
-                </tr>
-            `;
-
-            return;
-        }
-
-        table.innerHTML = "";
-
-        stocks.forEach((stock, index) => {
-
-            const row =
-                document.createElement("tr");
-
-            const score =
-                Number(stock.x10_score || 0);
-
-            let scoreClass = "score-medium";
-
-            if (score >= 70) {
-
-                scoreClass = "score-high";
-
-            }
-
-            let signalClass = "";
-
-            if (stock.signal === "BUY") {
-
-                signalClass = "signal-buy";
-
-            } else if (stock.signal === "WATCH") {
-
-                signalClass = "signal-watch";
-
-            }
-
-            row.innerHTML = `
-
-                <td>
-                    ${index + 1}
-                </td>
-
-                <td class="stock-name">
-                    ${stock.name || stock.symbol || "—"}
-                </td>
-
-                <td>
-                    ₹${formatNumber(stock.price)}
-                </td>
-
-                <td class="score ${scoreClass}">
-                    ${score}
-                </td>
-
-                <td class="signal ${signalClass}">
-                    ${stock.signal || "AVOID"}
-                </td>
-
-                <td>
-                    ${stock.trend || "Neutral"}
-                </td>
-
-                <td>
-                    ${formatNumber(stock.volume_ratio)}x
-                </td>
-
-            `;
-
-            table.appendChild(row);
-
-        });
-
-    } catch (error) {
-
-        console.error(
-            "X10 SCANNER ERROR:",
-            error
-        );
-
-        table.innerHTML = `
-            <tr>
-                <td colspan="7" style="text-align:center;color:#dc2626;">
-                    Unable to connect to X10 Scanner.
-                </td>
-            </tr>
-        `;
-
-    }
-
-}
-
-
-/* =========================
-   NUMBER FORMAT
-========================= */
-
-function formatNumber(value) {
-
-    const number =
-        Number(value);
-
-    if (!Number.isFinite(number)) {
-
-        return "—";
-
-    }
-
-    return number.toFixed(2);
-
-}
-
-
 /* =========================
    START X10 SCANNER
 ========================= */
+
 
 document.addEventListener(
     "DOMContentLoaded",
@@ -1743,7 +2053,8 @@ document.addEventListener(
 
     }
 );
-    
+
+
 </script>
 
 
