@@ -56,7 +56,7 @@ class AngelScanner:
             dataframe = self.service.get_historical_dataframe(
                 symbol=symbol,
                 token=token,
-                days=200,
+                days=100,
                 interval="ONE_DAY",
                 exchange="NSE"
             )
