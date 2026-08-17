@@ -59,7 +59,6 @@ class AngelOneService:
 
         try:
 
-            # Create SmartAPI connection
             self.smart_api = SmartConnect(
                 api_key=self.api_key
             )
@@ -83,7 +82,9 @@ class AngelOneService:
 
                 return {
                     "success": False,
-                    "message": "Empty response from Angel One login."
+                    "message": (
+                        "Empty response from Angel One login."
+                    )
                 }
 
             if not login_response.get("status"):
@@ -115,8 +116,35 @@ class AngelOneService:
 
             return {
                 "success": False,
-                "message": f"Angel One login error: {str(error)}"
+                "message": (
+                    f"Angel One login error: {str(error)}"
+                )
             }
+
+    # ==========================================================
+    # MARKET DATA SERVICE
+    #
+    # Compatibility method used by app.py
+    # ==========================================================
+
+    def get_market_data_service(self):
+
+        login_result = self.login()
+
+        if not login_result.get("success"):
+
+            return {
+                "success": False,
+                "message": login_result.get(
+                    "message",
+                    "Angel One login failed."
+                )
+            }
+
+        return {
+            "success": True,
+            "service": self
+        }
 
     # ==========================================================
     # LIVE MARKET DATA
@@ -144,10 +172,128 @@ class AngelOneService:
                 }
             )
 
+            if not response:
+
+                return {
+                    "success": False,
+                    "message": (
+                        "Empty response from Angel One market data."
+                    )
+                }
+
+            if not response.get("status"):
+
+                return {
+                    "success": False,
+                    "message": response.get(
+                        "message",
+                        "Market data request failed."
+                    ),
+                    "data": response
+                }
+
             return {
                 "success": True,
                 "symbol": symbol,
+                "token": str(token),
+                "exchange": exchange,
                 "data": response
+            }
+
+        except Exception as error:
+
+            return {
+                "success": False,
+                "message": str(error)
+            }
+
+    # ==========================================================
+    # LIVE LTP
+    # ==========================================================
+
+    def get_ltp(
+        self,
+        exchange,
+        tradingsymbol,
+        symboltoken
+    ):
+
+        login_result = self.login()
+
+        if not login_result.get("success"):
+
+            return {
+                "success": False,
+                "message": login_result.get(
+                    "message",
+                    "Angel One login failed."
+                )
+            }
+
+        try:
+
+            response = self.smart_api.getMarketData(
+                "FULL",
+                {
+                    exchange: [str(symboltoken)]
+                }
+            )
+
+            if not response:
+
+                return {
+                    "success": False,
+                    "message": (
+                        "Empty response from Angel One."
+                    )
+                }
+
+            if not response.get("status"):
+
+                return {
+                    "success": False,
+                    "message": response.get(
+                        "message",
+                        "Unable to fetch LTP."
+                    ),
+                    "data": response
+                }
+
+            data = response.get(
+                "data",
+                {}
+            )
+
+            # Angel One market-data response normally
+            # contains fetched data under fetchedData.
+            fetched_data = data.get(
+                "fetchedData",
+                []
+            )
+
+            if not fetched_data:
+
+                return {
+                    "success": False,
+                    "message": (
+                        "No LTP data returned by Angel One."
+                    ),
+                    "data": response
+                }
+
+            # Get first instrument result
+            quote = fetched_data[0]
+
+            return {
+                "success": True,
+                "exchange": exchange,
+                "tradingsymbol": tradingsymbol,
+                "symboltoken": str(symboltoken),
+                "ltp": quote.get(
+                    "ltp",
+                    0
+                ),
+                "data": quote
             }
 
         except Exception as error:
@@ -185,18 +331,32 @@ class AngelOneService:
 
         try:
 
-            days = min(int(days), 2000)
+            days = min(
+                int(days),
+                2000
+            )
 
             to_date = datetime.now()
-            from_date = to_date - timedelta(days=days)
+
+            from_date = (
+                to_date -
+                timedelta(days=days)
+            )
 
             params = {
+
                 "exchange": exchange,
-                "symboltoken": str(token),
+
+                "symboltoken": str(
+                    token
+                ),
+
                 "interval": interval,
+
                 "fromdate": from_date.strftime(
                     "%Y-%m-%d %H:%M"
                 ),
+
                 "todate": to_date.strftime(
                     "%Y-%m-%d %H:%M"
                 )
@@ -210,7 +370,9 @@ class AngelOneService:
 
                 return {
                     "success": False,
-                    "message": "Empty response from Angel One.",
+                    "message": (
+                        "Empty response from Angel One."
+                    ),
                     "data": []
                 }
 
@@ -234,24 +396,41 @@ class AngelOneService:
 
                 return {
                     "success": False,
-                    "message": "No historical candles found.",
+                    "message": (
+                        "No historical candles found."
+                    ),
                     "data": []
                 }
 
             return {
+
                 "success": True,
+
                 "symbol": symbol,
-                "token": str(token),
+
+                "token": str(
+                    token
+                ),
+
                 "interval": interval,
-                "count": len(candles),
+
+                "count": len(
+                    candles
+                ),
+
                 "data": candles
             }
 
         except Exception as error:
 
             return {
+
                 "success": False,
-                "message": str(error),
+
+                "message": str(
+                    error
+                ),
+
                 "data": []
             }
 
@@ -277,11 +456,16 @@ class AngelOneService:
         )
 
         if not result.get("success"):
+
             return None
 
-        candles = result.get("data", [])
+        candles = result.get(
+            "data",
+            []
+        )
 
         if not candles:
+
             return None
 
         try:
