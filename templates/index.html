@@ -860,82 +860,50 @@
 
             <table>
 
+            <thead>
 
-                <thead>
+<tr>
 
-                    <tr>
+<th>Rank</th>
 
-                        <th>
-                            Rank
-                        </th>
+<th>Stock</th>
 
-                        <th>
-                            Stock
-                        </th>
+<th>Price</th>
 
-                        <th>
-                            Price
-                        </th>
+<th>X10 Score</th>
 
-                        <th>
-                            X10 Score
-                        </th>
+<th>Signal</th>
 
-                        <th>
-                            Signal
-                        </th>
+<th>Entry</th>
 
-                        <th>
-                            Trend
-                        </th>
+<th>Stop Loss</th>
 
-                        <th>
-                            Entry
-                        </th>
+<th>Target</th>
 
-                        <th>
-                            Stop Loss
-                        </th>
+<th>RR</th>
 
-                        <th>
-                            Target
-                        </th>
+<th>Trend</th>
 
-                        <th>
-                            Risk
-                        </th>
+</tr>
 
-                        <th>
-                            Reward
-                        </th>
+</thead>
+                
+           
+                <tbody id="opportunity-table">
 
-                        <th>
-                            R:R
-                        </th>
+<tr>
 
-                        <th>
-                            Volume
-                        </th>
+<td colspan="10">
 
-                    </tr>
+<div id="x10-status">
 
-                </thead>
+⚡ X10 Engine initializing...
 
-            <tbody id="opportunity-table">
+</div>
 
-    <tr>
+</td>
 
-        <td colspan="7">
-
-            <div id="x10-status">
-
-                ⚡ X10 Engine initializing...
-
-            </div>
-
-        </td>
-
-    </tr>
+</tr>
 
 </tbody>
                
@@ -1764,141 +1732,61 @@ async function loadX10Scanner() {
                         score
                     );
 
-
                 row.innerHTML = `
 
 
-                    <td>
-                        ${index + 1}
-                    </td>
+<td>
+${index + 1}
+</td>
 
 
-                    <td class="stock-name">
-                        ${
-                            stock.name ||
-                            stock.symbol ||
-                            "—"
-                        }
-                    </td>
+<td class="stock-name">
+${stock.name || stock.symbol}
+</td>
 
 
-                    <td>
-                        ₹${
-                            formatNumber(
-                                stock.price
-                            )
-                        }
-                    </td>
+<td>
+₹${Number(stock.price).toFixed(2)}
+</td>
 
 
-                    <td
-                        class="score ${scoreClass}"
-                    >
-                        ${score}
-                    </td>
+<td class="score">
+${stock.x10_score}
+</td>
 
 
-                    <td
-                        class="
-                            signal
-                            ${signalClass}
-                        "
-                    >
-                        ${signal}
-                    </td>
+<td class="signal">
+${stock.signal}
+</td>
 
 
-                    <td>
-                        ${
-                            stock.trend ||
-                            "Neutral"
-                        }
-                    </td>
+<td>
+₹${Number(stock.entry).toFixed(2)}
+</td>
 
 
-                    <td
-                        class="trade-entry"
-                    >
-                        ₹${
-                            formatNumber(
-                                stock.entry
-                            )
-                        }
-                    </td>
+<td>
+₹${Number(stock.stop_loss).toFixed(2)}
+</td>
 
 
-                    <td
-                        class="trade-stop"
-                    >
-                        ₹${
-                            formatNumber(
-                                stock.stop_loss
-                            )
-                        }
-                    </td>
+<td>
+₹${Number(stock.target).toFixed(2)}
+</td>
 
 
-                    <td
-                        class="trade-target"
-                    >
-                        ₹${
-                            formatNumber(
-                                stock.target
-                            )
-                        }
-                    </td>
+<td>
+${Number(stock.risk_reward).toFixed(2)}
+</td>
 
 
-                    <td>
-                        ₹${
-                            formatNumber(
-                                stock.risk
-                            )
-                        }
-                    </td>
+<td>
+${stock.trend}
+</td>
 
 
-                    <td>
-                        ₹${
-                            formatNumber(
-                                stock.reward
-                            )
-                        }
-                    </td>
-
-
-                    <td
-                        class="risk-reward"
-                    >
-                        ${
-                            formatNumber(
-                                stock.risk_reward
-                            )
-                        }
-                    </td>
-
-
-                    <td>
-                        ${
-                            formatNumber(
-                                stock.volume_ratio
-                            )
-                        }x
-                    </td>
-
-
-                `;
-
-
-                table.appendChild(
-                    row
-                );
-
-
-            }
-        );
-
-
+`;
+                
         status.textContent =
             `✅ X10 scan completed • ` +
             `Scanned: ${
