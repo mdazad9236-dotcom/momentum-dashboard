@@ -28,13 +28,30 @@ class AngelScanner:
         name = stock.get("name", symbol)
 
         if not symbol or not token:
+            print(
+                "[STOCK] Missing symbol or token."
+            )
             return None
 
+        stock_start = time.time()
+
         try:
+
+            print(
+                f"[STOCK] {symbol} "
+                f"START"
+            )
 
             # --------------------------------------------------
             # GET HISTORICAL DATA FROM ANGEL ONE
             # --------------------------------------------------
+
+            print(
+                f"[STOCK] {symbol} "
+                f"Requesting historical data..."
+            )
+
+            historical_start = time.time()
 
             dataframe = self.service.get_historical_dataframe(
                 symbol=symbol,
@@ -44,29 +61,102 @@ class AngelScanner:
                 exchange="NSE"
             )
 
+            historical_time = round(
+                time.time() - historical_start,
+                2
+            )
+
+            print(
+                f"[STOCK] {symbol} "
+                f"Historical data completed in "
+                f"{historical_time}s"
+            )
+
             if dataframe is None or dataframe.empty:
+
+                print(
+                    f"[STOCK] {symbol} "
+                    f"No historical data."
+                )
+
                 return None
+
+            print(
+                f"[STOCK] {symbol} "
+                f"Historical rows: "
+                f"{len(dataframe)}"
+            )
 
             # --------------------------------------------------
             # TECHNICAL ANALYSIS
             # --------------------------------------------------
 
-            analyzer = TechnicalAnalyzer(dataframe)
+            print(
+                f"[STOCK] {symbol} "
+                f"Technical analysis START..."
+            )
+
+            technical_start = time.time()
+
+            analyzer = TechnicalAnalyzer(
+                dataframe
+            )
 
             analysis = analyzer.calculate()
 
+            technical_time = round(
+                time.time() - technical_start,
+                2
+            )
+
+            print(
+                f"[STOCK] {symbol} "
+                f"Technical analysis completed in "
+                f"{technical_time}s"
+            )
+
             if analysis is None:
+
+                print(
+                    f"[STOCK] {symbol} "
+                    f"Technical analysis returned no result."
+                )
+
                 return None
 
             # --------------------------------------------------
             # X10 ENGINE
             # --------------------------------------------------
 
+            print(
+                f"[STOCK] {symbol} "
+                f"X10 analysis START..."
+            )
+
+            x10_start = time.time()
+
             x10_result = self.x10_engine.analyze(
                 analysis
             )
 
+            x10_time = round(
+                time.time() - x10_start,
+                2
+            )
+
+            print(
+                f"[STOCK] {symbol} "
+                f"X10 analysis completed in "
+                f"{x10_time}s"
+            )
+
             if x10_result is None:
+
+                print(
+                    f"[STOCK] {symbol} "
+                    f"X10 returned no result."
+                )
+
                 return None
 
             # --------------------------------------------------
@@ -91,10 +181,8 @@ class AngelScanner:
             # --------------------------------------------------
             # EXISTING COMPATIBILITY FIELD
             #
-            # NOTE:
-            # This is kept for API compatibility.
-            # It should not be interpreted as a real
-            # statistical probability.
+            # Kept exactly as before.
+            # This is not a statistical probability.
             # --------------------------------------------------
 
             probability = x10_score
@@ -103,11 +191,11 @@ class AngelScanner:
             # FINAL STOCK RESULT
             # --------------------------------------------------
 
-            return {
+            result = {
 
-                # --------------------------------------------------
+                # ------------------------------------------------
                 # IDENTIFICATION
-                # --------------------------------------------------
+                # ------------------------------------------------
 
                 "symbol": symbol,
 
@@ -115,18 +203,18 @@ class AngelScanner:
 
                 "name": name,
 
-                # --------------------------------------------------
+                # ------------------------------------------------
                 # PRICE
-                # --------------------------------------------------
+                # ------------------------------------------------
 
                 "price": analysis.get(
                     "price",
                     0
                 ),
 
-                # --------------------------------------------------
+                # ------------------------------------------------
                 # SCORES
-                # --------------------------------------------------
+                # ------------------------------------------------
 
                 "technical_score": technical_score,
 
@@ -134,15 +222,15 @@ class AngelScanner:
 
                 "success_probability": probability,
 
-                # --------------------------------------------------
+                # ------------------------------------------------
                 # X10 SIGNAL
-                # --------------------------------------------------
+                # ------------------------------------------------
 
                 "signal": signal,
 
-                # --------------------------------------------------
+                # ------------------------------------------------
                 # TRADE PLAN
-                # --------------------------------------------------
+                # ------------------------------------------------
 
                 "entry": x10_result.get(
                     "entry",
@@ -174,9 +262,9 @@ class AngelScanner:
                     0
                 ),
 
-                # --------------------------------------------------
+                # ------------------------------------------------
                 # TREND / MOMENTUM
-                # --------------------------------------------------
+                # ------------------------------------------------
 
                 "trend": analysis.get(
                     "trend",
@@ -188,18 +276,18 @@ class AngelScanner:
                     "Neutral"
                 ),
 
-                # --------------------------------------------------
+                # ------------------------------------------------
                 # RSI
-                # --------------------------------------------------
+                # ------------------------------------------------
 
                 "rsi": analysis.get(
                     "rsi",
                     0
                 ),
 
-                # --------------------------------------------------
+                # ------------------------------------------------
                 # MOVING AVERAGES
-                # --------------------------------------------------
+                # ------------------------------------------------
 
                 "ema20": analysis.get(
                     "ema20",
@@ -216,9 +304,9 @@ class AngelScanner:
                     0
                 ),
 
-                # --------------------------------------------------
+                # ------------------------------------------------
                 # MACD
-                # --------------------------------------------------
+                # ------------------------------------------------
 
                 "macd": analysis.get(
                     "macd",
@@ -235,9 +323,9 @@ class AngelScanner:
                     0
                 ),
 
-                # --------------------------------------------------
+                # ------------------------------------------------
                 # ADX / DIRECTIONAL MOVEMENT
-                # --------------------------------------------------
+                # ------------------------------------------------
 
                 "adx": analysis.get(
                     "adx",
@@ -254,9 +342,9 @@ class AngelScanner:
                     0
                 ),
 
-                # --------------------------------------------------
+                # ------------------------------------------------
                 # SUPPORT / RESISTANCE
-                # --------------------------------------------------
+                # ------------------------------------------------
 
                 "support": analysis.get(
                     "support",
@@ -268,27 +356,27 @@ class AngelScanner:
                     0
                 ),
 
-                # --------------------------------------------------
+                # ------------------------------------------------
                 # VOLUME
-                # --------------------------------------------------
+                # ------------------------------------------------
 
                 "volume_ratio": analysis.get(
                     "volume_ratio",
                     0
                 ),
 
-                # --------------------------------------------------
+                # ------------------------------------------------
                 # VOLATILITY
-                # --------------------------------------------------
+                # ------------------------------------------------
 
                 "atr": analysis.get(
                     "atr",
                     0
                 ),
 
-                # --------------------------------------------------
+                # ------------------------------------------------
                 # 52 WEEK RANGE
-                # --------------------------------------------------
+                # ------------------------------------------------
 
                 "52_week_high": analysis.get(
                     "52_week_high",
@@ -301,10 +389,33 @@ class AngelScanner:
                 )
             }
 
-        except Exception as error:
+            total_stock_time = round(
+                time.time() - stock_start,
+                2
+            )
 
             print(
-                f"Scanner error {symbol}: {error}"
+                f"[STOCK] {symbol} "
+                f"COMPLETE in "
+                f"{total_stock_time}s "
+                f"| X10 Score: {x10_score} "
+                f"| Signal: {signal}"
+            )
+
+            return result
+
+        except Exception as error:
+
+            total_stock_time = round(
+                time.time() - stock_start,
+                2
+            )
+
+            print(
+                f"[STOCK] {symbol} "
+                f"ERROR after "
+                f"{total_stock_time}s: "
+                f"{error}"
             )
 
             return None
@@ -317,42 +428,126 @@ class AngelScanner:
 
         start_time = time.time()
 
+        print(
+            "=================================================="
+        )
+
+        print(
+            "X10 MARKET SCANNER STARTING"
+        )
+
+        print(
+            f"Requested limit: {limit}"
+        )
+
+        print(
+            f"Batch size: {self.batch_size}"
+        )
+
+        print(
+            f"Delay: {self.delay}s"
+        )
+
+        print(
+            "=================================================="
+        )
+
         try:
 
             # --------------------------------------------------
             # LOAD ANGEL ONE INSTRUMENTS
             # --------------------------------------------------
 
-            result = self.instrument_manager.load_cache()
+            print(
+                "[SCAN] Loading Angel One instrument cache..."
+            )
+
+            instrument_start = time.time()
+
+            result = (
+                self.instrument_manager
+                .load_cache()
+            )
+
+            instrument_time = round(
+                time.time() - instrument_start,
+                2
+            )
+
+            print(
+                "[SCAN] Instrument loading completed in "
+                f"{instrument_time}s"
+            )
 
             if not result.get("success"):
 
+                print(
+                    "[SCAN] Instrument loading FAILED:"
+                    f" {result.get('message')}"
+                )
+
                 return {
+
                     "success": False,
+
                     "message": (
                         "Unable to load Angel One instruments."
                     ),
+
                     "stocks": []
                 }
+
+            print(
+                "[SCAN] Instruments available: "
+                f"{result.get('count', 0)}"
+            )
 
             # --------------------------------------------------
             # GET NSE EQUITIES
             # --------------------------------------------------
+
+            print(
+                "[SCAN] Getting NSE equity stocks..."
+            )
+
+            equity_start = time.time()
 
             stocks = (
                 self.instrument_manager
                 .get_nse_equities()
             )
 
+            equity_time = round(
+                time.time() - equity_start,
+                2
+            )
+
+            print(
+                "[SCAN] NSE equity filtering completed in "
+                f"{equity_time}s"
+            )
+
             if not stocks:
 
+                print(
+                    "[SCAN] No NSE equity stocks found."
+                )
+
                 return {
+
                     "success": False,
+
                     "message": (
                         "No NSE equity stocks found."
                     ),
+
                     "stocks": []
                 }
+
+            print(
+                f"[SCAN] Total NSE equities available: "
+                f"{len(stocks)}"
+            )
 
             # --------------------------------------------------
             # LIMIT SCAN
@@ -361,8 +556,16 @@ class AngelScanner:
             stocks = stocks[:limit]
 
             print(
-                f"Starting scanner for "
+                "=================================================="
+            )
+
+            print(
+                f"[SCAN] Starting scan for "
                 f"{len(stocks)} stocks..."
+            )
+
+            print(
+                "=================================================="
             )
 
             results = []
@@ -376,13 +579,32 @@ class AngelScanner:
                 start=1
             ):
 
+                symbol = stock.get(
+                    "symbol",
+                    "UNKNOWN"
+                )
+
                 print(
-                    f"[{index}/{len(stocks)}] "
-                    f"{stock.get('symbol')}"
+                    ""
+                )
+
+                print(
+                    "--------------------------------------------------"
+                )
+
+                print(
+                    f"[SCAN] STOCK {index}/{len(stocks)}: "
+                    f"{symbol}"
+                )
+
+                print(
+                    "--------------------------------------------------"
                 )
 
                 stock_analysis = (
-                    self.analyze_stock(stock)
+                    self.analyze_stock(
+                        stock
+                    )
                 )
 
                 if stock_analysis:
@@ -391,11 +613,28 @@ class AngelScanner:
                         stock_analysis
                     )
 
-                # --------------------------------------------------
+                    print(
+                        f"[SCAN] {symbol} "
+                        f"ADDED TO RESULTS"
+                    )
+
+                else:
+
+                    print(
+                        f"[SCAN] {symbol} "
+                        f"SKIPPED"
+                    )
+
+                # ------------------------------------------------
                 # DELAY BETWEEN REQUESTS
-                # --------------------------------------------------
+                # ------------------------------------------------
 
                 if index < len(stocks):
+
+                    print(
+                        f"[SCAN] Waiting "
+                        f"{self.delay}s before next stock..."
+                    )
 
                     time.sleep(
                         self.delay
@@ -404,6 +643,10 @@ class AngelScanner:
             # --------------------------------------------------
             # SORT BY X10 SCORE
             # --------------------------------------------------
+
+            print(
+                "[SCAN] Sorting results by X10 score..."
+            )
 
             results.sort(
                 key=lambda item: item.get(
@@ -429,8 +672,31 @@ class AngelScanner:
             )
 
             print(
-                f"Scanner completed in "
-                f"{elapsed} seconds."
+                "=================================================="
+            )
+
+            print(
+                "[SCAN] X10 SCANNER COMPLETED"
+            )
+
+            print(
+                f"[SCAN] Scanned: {len(stocks)}"
+            )
+
+            print(
+                f"[SCAN] Successful: {len(results)}"
+            )
+
+            print(
+                f"[SCAN] Returned: {len(top_stocks)}"
+            )
+
+            print(
+                f"[SCAN] Total time: {elapsed}s"
+            )
+
+            print(
+                "=================================================="
             )
 
             # --------------------------------------------------
@@ -460,9 +726,29 @@ class AngelScanner:
 
         except Exception as error:
 
+            elapsed = round(
+                time.time() - start_time,
+                2
+            )
+
             print(
-                "Market scanner error:",
-                error
+                "=================================================="
+            )
+
+            print(
+                "MARKET SCANNER ERROR"
+            )
+
+            print(
+                f"Time before error: {elapsed}s"
+            )
+
+            print(
+                f"Error: {error}"
+            )
+
+            print(
+                "=================================================="
             )
 
             return {
