@@ -40,11 +40,12 @@ class AngelScanner:
                    "entry": x10.get("entry", 0), "entry_low": x10.get("entry_low", 0), "entry_high": x10.get("entry_high", 0),
                    "stop_loss": x10.get("stop_loss", 0), "target": x10.get("target", 0), "target_1": x10.get("target_1", 0),
                    "target_2": x10.get("target_2", 0), "risk": x10.get("risk", 0), "reward": x10.get("reward", 0),
-                   "risk_reward": x10.get("risk_reward", 0), "trailing_stop": x10.get("trailing_stop", 0),
-                   "chase_price": x10.get("chase_price", 0), "dont_chase": x10.get("dont_chase", False),
-                   "setup_quality": x10.get("setup_quality", "WEAK"), "trend": analysis.get("trend", "Neutral"),
-                   "momentum": analysis.get("momentum", "Neutral"), "rsi": analysis.get("rsi", 0), "ema20": analysis.get("ema20", 0),
-                   "ema50": analysis.get("ema50", 0), "ema200": analysis.get("ema200", 0), "macd": analysis.get("macd", 0),
+                   "risk_reward": x10.get("risk_reward", "1:0"), "risk_reward_value": x10.get("risk_reward_value", 0),
+                   "trailing_stop": x10.get("trailing_stop", 0), "chase_price": x10.get("chase_price", 0),
+                   "dont_chase": x10.get("dont_chase", False), "setup_quality": x10.get("setup_quality", "WEAK"),
+                   "trend": analysis.get("trend", "Neutral"), "momentum": analysis.get("momentum", "Neutral"),
+                   "rsi": analysis.get("rsi", 0), "ema20": analysis.get("ema20", 0), "ema50": analysis.get("ema50", 0),
+                   "ema200": analysis.get("ema200", 0), "macd": analysis.get("macd", 0),
                    "macd_signal": analysis.get("macd_signal", 0), "macd_histogram": analysis.get("macd_histogram", 0),
                    "adx": analysis.get("adx", 0), "plus_di": analysis.get("plus_di", 0), "minus_di": analysis.get("minus_di", 0),
                    "support": analysis.get("support", 0), "resistance": analysis.get("resistance", 0),
@@ -134,7 +135,7 @@ class AngelScanner:
             results.extend(self._analyze_batch(selected[offset:offset + self.batch_size]))
             if self.delay:
                 time.sleep(self.delay)
-        results.sort(key=lambda item: (item.get("x10_score", 0), item.get("risk_reward", 0)), reverse=True)
+        results.sort(key=lambda item: (item.get("x10_score", 0), item.get("risk_reward_value", 0)), reverse=True)
         indices = self._get_index_snapshots()
         elapsed = round(time.time() - start, 2)
         return {"success": True, "count": len(results[:20]), "scanned": len(selected), "successful": len(results),
