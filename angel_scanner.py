@@ -1,5 +1,6 @@
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
 
 from x10_engine import X10Engine
 from angel_service import AngelOneService
@@ -33,18 +34,14 @@ class AngelScanner:
             )
             if dataframe is None or dataframe.empty:
                 return None
-
             analysis = TechnicalAnalyzer(dataframe).calculate()
             if not analysis:
                 return None
             x10 = self.x10_engine.analyze(analysis)
             if not x10:
                 return None
-
-            result = {
-                "symbol": symbol,
-                "token": str(token),
-                "name": name,
+            return {
+                "symbol": symbol, "token": str(token), "name": name,
                 "price": analysis.get("price", 0),
                 "technical_score": analysis.get("technical_score", 0),
                 "x10_score": x10.get("x10_score", 0),
@@ -84,7 +81,6 @@ class AngelScanner:
                 "52_week_low": analysis.get("52_week_low", 0),
                 "scan_time": round(time.time() - started, 2),
             }
-            return result
         except Exception as error:
             print(f"[STOCK] {symbol} ERROR: {error}")
             return None
@@ -95,11 +91,12 @@ class AngelScanner:
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = [executor.submit(self.analyze_stock, stock) for stock in stocks]
             for future in as_completed(futures):
-                result = future.result()
-                if result:
-                    results.append(result)
-                if self.delay:
-                    time.sleep(self.delay)
+                try:
+                    result = future.result()
+                    if result:
+                        results.append(result)
+                except Exception as error:
+                    print(f"[BATCH] ERROR: {error}")
         return results
 
     def _get_index_snapshots(self):
@@ -127,20 +124,44 @@ class AngelScanner:
                 candles = history.get("data", []) if history.get("success") else []
                 lows = [float(c[3]) for c in candles[-20:] if len(c) >= 5]
                 highs = [float(c[2]) for c in candles[-20:] if len(c) >= 5]
-                support = max(max(lows), low) if lows else low
-                resistance = min(max(highs), high) if highs else high
-                if support >= price > 0:
-                    support = min(low or price, price * 0.995)
-                if resistance <= price and price > 0:
-                    resistance = max(high or price, price * 1.005)
-
-                snapshots.append(build_index_snapshot(
+                support = min(lows) if lows else low
+                resistance = max(highs) if highs else high
+                if price > 0 and support <= 0:
+                    support = price * 0.99
+                if price > 0 and resistance <= price:
+                    resistance = max(high or price, price * 1.01)
+                snapshot = build_index_snapshot(
                     name, price, support, resistance, change, change_pct
-                ))
+                )
             except Exception as error:
                 print(f"[INDEX] {name} ERROR: {error}")
-                snapshots.append(build_index_snapshot(name, 0, 0, 0, 0, 0))
+                snapshot = build_index_snapshot(name, 0, 0, 0, 0, 0)
+            snapshots.append(snapshot)
         return snapshots
+
+    @staticmethod
+    def _index_rows(snapshots):
+        """Represent indices as scanner-safe rows for the existing /api/scan response."""
+        rows = []
+        for snapshot in snapshots:
+            rows.append({
+                "symbol": "__INDEX__" + snapshot["name"],
+                "name": json.dumps(snapshot, separators=(",", ":")),
+                "price": snapshot["price"],
+                "support": snapshot["support"],
+                "resistance": snapshot["resistance"],
+                "change": snapshot["change"],
+                "change_percent": snapshot["change_percent"],
+                "trend": snapshot["bias"],
+                "momentum": snapshot["bias"],
+                "x10_score": 0,
+                "signal": snapshot["bias"],
+                "technical_score": 0,
+                "risk_reward": 0,
+                "volume_ratio": 0,
+                "is_index": True,
+            })
+        return rows
 
     def scan_market(self, limit=50):
         start = time.time()
@@ -148,7 +169,6 @@ class AngelScanner:
             login = self.service.login()
             if not login.get("success"):
                 return {"success": False, "message": login.get("message", "Angel One login failed."), "stocks": []}
-
             cache = self.instrument_manager.load_cache()
             if not cache.get("success"):
                 return {"success": False, "message": "Unable to load Angel One instruments.", "stocks": []}
@@ -156,7 +176,6 @@ class AngelScanner:
             stocks = self.instrument_manager.get_nse_equities() or []
             stocks = stocks[:max(1, int(limit))]
             results = []
-
             for start_index in range(0, len(stocks), self.batch_size):
                 batch = stocks[start_index:start_index + self.batch_size]
                 results.extend(self._analyze_batch(batch))
@@ -171,7 +190,7 @@ class AngelScanner:
                 "scanned": len(stocks),
                 "successful": len(results),
                 "time_seconds": elapsed,
-                "stocks": top_stocks,
+                "stocks": top_stocks + self._index_rows(indices),
                 "indices": indices,
             }
         except Exception as error:
