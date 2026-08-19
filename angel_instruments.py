@@ -5,12 +5,20 @@ from datetime import datetime
 
 INSTRUMENT_URL = "https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json"
 CACHE_FILE = "angel_instruments.json"
+TEMP_CACHE_FILE = "angel_instruments.json.tmp"
 
 
 class AngelInstrumentManager:
     def __init__(self):
         self.instruments = []
         self._stock_cache = None
+
+    def _save_cache_atomically(self, data):
+        with open(TEMP_CACHE_FILE, "w", encoding="utf-8") as file:
+            json.dump(data, file, separators=(",", ":"))
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(TEMP_CACHE_FILE, CACHE_FILE)
 
     def download_master(self):
         try:
@@ -19,8 +27,7 @@ class AngelInstrumentManager:
             data = response.json()
             if not isinstance(data, list) or not data:
                 raise ValueError("Invalid or empty Angel One instrument data.")
-            with open(CACHE_FILE, "w", encoding="utf-8") as file:
-                json.dump(data, file)
+            self._save_cache_atomically(data)
             self.instruments = data
             self._stock_cache = None
             return {"success": True, "count": len(data), "message": "Instrument master downloaded."}
@@ -42,11 +49,21 @@ class AngelInstrumentManager:
                     raise ValueError("Instrument cache is empty or invalid.")
                 self.instruments = data
                 return {"success": True, "count": len(data), "message": "Instrument cache loaded."}
-            except Exception as error:
-                print("Instrument cache read error:", error)
+            except (json.JSONDecodeError, OSError, ValueError) as error:
+                print("Instrument cache read error; rebuilding cache:", error)
+                try:
+                    os.remove(CACHE_FILE)
+                except OSError:
+                    pass
         return self.download_master()
 
     def refresh(self):
+        self.instruments = []
+        self._stock_cache = None
+        try:
+            os.remove(CACHE_FILE)
+        except OSError:
+            pass
         return self.download_master()
 
     def get_nse_equities(self):
@@ -75,47 +92,26 @@ class AngelInstrumentManager:
         return stocks
 
     def find_stock(self, symbol):
-        """Find an NSE equity or NSE index instrument for historical/chart requests."""
         requested = str(symbol).upper().strip()
         if not self.instruments and not self.load_cache().get("success"):
             return None
-
-        # Angel One uses NIFTY, BANKNIFTY, FINNIFTY, etc. for index instruments,
-        # while the dashboard often displays friendly names such as "NIFTY 50".
         aliases = {
-            "NIFTY 50": "NIFTY",
-            "NIFTY50": "NIFTY",
-            "NIFTY BANK": "BANKNIFTY",
-            "BANK NIFTY": "BANKNIFTY",
-            "BANKNIFTY 50": "BANKNIFTY",
-            "NIFTY FIN SERVICE": "FINNIFTY",
-            "NIFTY FIN SERV": "FINNIFTY",
-            "NIFTY FINANCIAL SERVICES": "FINNIFTY",
-            "NIFTY MIDCAP SELECT": "MIDCPNIFTY",
+            "NIFTY 50": "NIFTY", "NIFTY50": "NIFTY", "NIFTY BANK": "BANKNIFTY",
+            "BANK NIFTY": "BANKNIFTY", "BANKNIFTY 50": "BANKNIFTY",
+            "NIFTY FIN SERVICE": "FINNIFTY", "NIFTY FIN SERV": "FINNIFTY",
+            "NIFTY FINANCIAL SERVICES": "FINNIFTY", "NIFTY MIDCAP SELECT": "MIDCPNIFTY",
         }
         candidates = [requested, aliases.get(requested, requested)]
         if requested.endswith("-EQ"):
             candidates.append(requested[:-3])
-
-        # First look through the complete master for index/market instruments.
         for item in self.instruments:
             if not isinstance(item, dict) or str(item.get("exch_seg", "")).upper() != "NSE":
                 continue
             raw_symbol = str(item.get("symbol", "")).strip().upper()
             raw_name = str(item.get("name", "")).strip().upper()
             token = str(item.get("token", "")).strip()
-            if not token:
-                continue
-            if raw_symbol in candidates or raw_name in candidates:
-                return {
-                    "symbol": raw_symbol,
-                    "token": token,
-                    "name": str(item.get("name", "")).strip(),
-                    "exchange": "NSE",
-                    "instrumenttype": str(item.get("instrumenttype", "")).strip(),
-                }
-
-        # Then retain the existing equity behaviour.
+            if token and (raw_symbol in candidates or raw_name in candidates):
+                return {"symbol": raw_symbol, "token": token, "name": str(item.get("name", "")).strip(), "exchange": "NSE", "instrumenttype": str(item.get("instrumenttype", "")).strip()}
         equity_symbol = requested if requested.endswith("-EQ") else requested + "-EQ"
         for stock in self.get_nse_equities():
             if stock["symbol"] == equity_symbol:
