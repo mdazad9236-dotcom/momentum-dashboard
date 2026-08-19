@@ -113,6 +113,75 @@ def _background_refresh_loop():
 threading.Thread(target=_background_refresh_loop, name="x10-refresh-loop", daemon=True).start()
 
 
+@app.after_request
+def inject_tradingview_fix(response):
+    """Replace the fragile iframe chart function with TradingView's official widget loader."""
+    if request.path != "/" or "text/html" not in response.content_type:
+        return response
+    try:
+        html = response.get_data(as_text=True)
+        if "id=\"chartBox\"" not in html or "function loadChart" not in html:
+            return response
+        fix = r'''<script>
+(function(){
+  window.loadChart = function(sym){
+    var raw = (sym || (document.getElementById('tv') || {}).value || 'NIFTY').toUpperCase().trim();
+    raw = raw.replace(/^NSE:/,'').replace(/[^A-Z0-9_]/g,'');
+    if(!raw) raw='NIFTY';
+    var input=document.getElementById('tv'); if(input) input.value=raw;
+    var box=document.getElementById('chartBox');
+    if(!box) return;
+    box.innerHTML='';
+    var wrap=document.createElement('div');
+    wrap.className='tradingview-widget-container';
+    wrap.style.width='100%'; wrap.style.height='100%';
+    var chart=document.createElement('div');
+    chart.className='tradingview-widget-container__widget';
+    chart.style.width='100%'; chart.style.height='100%';
+    wrap.appendChild(chart);
+    var note=document.createElement('div');
+    note.style.cssText='position:absolute;left:-9999px';
+    note.textContent='TradingView';
+    wrap.appendChild(note);
+    box.style.position='relative';
+    box.appendChild(wrap);
+    var script=document.createElement('script');
+    script.type='text/javascript';
+    script.async=true;
+    script.src='https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+    script.text=JSON.stringify({
+      autosize:true,
+      symbol:'NSE:'+raw,
+      interval:'D',
+      timezone:'Asia/Kolkata',
+      theme:'dark',
+      style:'1',
+      locale:'en',
+      allow_symbol_change:true,
+      hide_side_toolbar:false,
+      hide_top_toolbar:false,
+      hide_legend:false,
+      save_image:false,
+      calendar:false,
+      support_host:'https://www.tradingview.com'
+    });
+    wrap.appendChild(script);
+  };
+  window.addEventListener('load',function(){
+    var box=document.getElementById('chartBox');
+    if(box && !box.dataset.tvReady){
+      box.dataset.tvReady='1';
+      window.loadChart('NIFTY');
+    }
+  });
+})();
+</script>'''
+        response.set_data(html.replace("</body>", fix + "</body>"))
+    except Exception as error:
+        print("TRADINGVIEW INJECTION ERROR:", error)
+    return response
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if is_authenticated():
@@ -227,7 +296,6 @@ def instrument_endpoint(symbol):
 @app.route("/api/ai-assistant", methods=["POST"])
 @login_required
 def ai_assistant():
-    """Market-aware assistant. Uses the current X10 snapshot and OpenAI web search for fresh news."""
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         return jsonify({"success": False, "message": "AI Assistant is not configured yet. Add OPENAI_API_KEY to the Render environment variables."}), 503
@@ -240,20 +308,11 @@ def ai_assistant():
         question = question[:4000]
 
     snapshot = _snapshot_response()
-    context = {
-        "indices": snapshot.get("indices", []),
-        "top_stocks": snapshot.get("stocks", [])[:12],
-        "updated_at": snapshot.get("updated_at"),
-    }
+    context = {"indices": snapshot.get("indices", []), "top_stocks": snapshot.get("stocks", [])[:12], "updated_at": snapshot.get("updated_at")}
     system_prompt = """You are Azad AI Plus, a concise Indian stock-market research assistant. Answer questions about NSE/BSE stocks, indices, technical analysis, market structure, corporate developments and current market news. For anything time-sensitive, especially current news, today's market, recent events, prices or announcements, use web search and clearly distinguish confirmed facts from interpretation. Use the supplied live X10/Angel One snapshot when relevant. Never invent prices, news, targets or company facts. If the user asks whether to buy, provide a decision-support view with bull case, bear case, key levels and risk; do not present certainty or guaranteed returns. Prefer Indian market terminology and INR. Keep answers practical and easy to read. Mention when information is delayed or requires confirmation from the live broker feed."""
-    user_prompt = f"User question:\n{question}\n\nCurrent Azad AI Plus market snapshot:\n{context}\n\nAnswer the user's question directly. If current news is requested, search the web before answering and include the publication/source names and dates in the response."
+    user_prompt = f"User question:\n{question}\n\nCurrent Azad AI Plus market snapshot:\n{context}\n\nAnswer the user's question directly. If current news is requested, search the web before answering and include publication/source names and dates."
 
-    payload = {
-        "model": os.getenv("OPENAI_MODEL", "gpt-5.6-luna"),
-        "input": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-        "tools": [{"type": "web_search"}],
-        "max_output_tokens": 1400,
-    }
+    payload = {"model": os.getenv("OPENAI_MODEL", "gpt-5.6-luna"), "input": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "tools": [{"type": "web_search"}], "max_output_tokens": 1400}
     try:
         response = requests.post("https://api.openai.com/v1/responses", headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json=payload, timeout=45)
         data = response.json()
@@ -265,9 +324,7 @@ def ai_assistant():
                 for content in item.get("content", []):
                     if content.get("type") in ("output_text", "text"):
                         answer += content.get("text", "")
-        if not answer:
-            answer = "I couldn't generate an answer right now. Please try again."
-        return jsonify({"success": True, "answer": answer, "model": payload["model"]})
+        return jsonify({"success": True, "answer": answer or "I couldn't generate an answer right now. Please try again.", "model": payload["model"]})
     except requests.RequestException as error:
         return jsonify({"success": False, "message": f"AI service connection failed: {error}"}), 502
 
