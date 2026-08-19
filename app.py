@@ -1,4 +1,7 @@
-from flask import Flask, jsonify, render_template
+import os
+from functools import wraps
+
+from flask import Flask, jsonify, render_template, request, redirect, url_for, session
 
 from angel_instruments import AngelInstrumentManager
 from angel_service import AngelOneService
@@ -6,17 +9,65 @@ from stock_service import StockService
 from angel_scanner import AngelScanner
 
 app = Flask(__name__)
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "x10-marketai-session-key-change-me")
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+
 angel_service = AngelOneService()
 stock_service = StockService()
 instrument_manager = AngelInstrumentManager()
 
+APP_USER_ID = "Admin"
+APP_PASSWORD = "Admin"
+
+
+def is_authenticated():
+    return session.get("authenticated") is True
+
+
+def login_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not is_authenticated():
+            if request.path.startswith("/api/"):
+                return jsonify({"success": False, "authenticated": False, "message": "Authentication required."}), 401
+            return redirect(url_for("login"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if is_authenticated():
+        return redirect(url_for("home"))
+    error = None
+    if request.method == "POST":
+        user_id = request.form.get("user_id", "")
+        password = request.form.get("password", "")
+        if user_id == APP_USER_ID and password == APP_PASSWORD:
+            session.clear()
+            session["authenticated"] = True
+            session["user_id"] = APP_USER_ID
+            return redirect(url_for("home"))
+        error = "Invalid User ID or Password."
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout", methods=["GET"])
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
 
 @app.route("/", methods=["GET"])
+@login_required
 def home():
     return render_template("index.html")
 
 
 @app.route("/api/analyze/<symbol>", methods=["GET"])
+@login_required
 def analyze_stock(symbol):
     try:
         result = stock_service.get_stock_analysis(symbol.upper().strip())
@@ -29,6 +80,7 @@ def analyze_stock(symbol):
 
 
 @app.route("/api/angel-test", methods=["GET"])
+@login_required
 def angel_test():
     try:
         result = angel_service.login()
@@ -38,6 +90,7 @@ def angel_test():
 
 
 @app.route("/api/market-test", methods=["GET"])
+@login_required
 def market_test():
     try:
         result = angel_service.get_market_data_service()
@@ -47,6 +100,7 @@ def market_test():
 
 
 @app.route("/api/ltp-test", methods=["GET"])
+@login_required
 def ltp_test():
     try:
         result = angel_service.get_ltp("NSE", "RELIANCE-EQ", "2885")
@@ -65,6 +119,7 @@ def clean_stock(stock):
 
 
 @app.route("/api/scan", methods=["GET"])
+@login_required
 def scan():
     try:
         scanner = AngelScanner(batch_size=5, delay=0.03, max_workers=5)
@@ -81,13 +136,13 @@ def scan():
 
 
 @app.route("/api/indices", methods=["GET"])
+@login_required
 def indices_endpoint():
-    """Load indices independently from the stock scan so a slow scan cannot blank Market Pulse."""
     try:
         scanner = AngelScanner(max_workers=1)
-        login = scanner.service.login()
-        if not login.get("success"):
-            return jsonify({"success": False, "message": login.get("message", "Angel One login failed."), "indices": []}), 200
+        login_result = scanner.service.login()
+        if not login_result.get("success"):
+            return jsonify({"success": False, "message": login_result.get("message", "Angel One login failed."), "indices": []}), 200
         indices = scanner._get_index_snapshots()
         return jsonify({"success": True, "indices": indices})
     except Exception as error:
@@ -95,6 +150,7 @@ def indices_endpoint():
 
 
 @app.route("/api/historical/<symbol>", methods=["GET"])
+@login_required
 def historical_endpoint(symbol):
     try:
         requested = symbol.upper().strip()
@@ -107,6 +163,7 @@ def historical_endpoint(symbol):
 
 
 @app.route("/api/instruments", methods=["GET"])
+@login_required
 def instruments_endpoint():
     try:
         result = instrument_manager.load_cache()
@@ -119,6 +176,7 @@ def instruments_endpoint():
 
 
 @app.route("/api/instruments/refresh", methods=["GET"])
+@login_required
 def refresh_instruments_endpoint():
     try:
         result = instrument_manager.refresh()
@@ -131,6 +189,7 @@ def refresh_instruments_endpoint():
 
 
 @app.route("/api/instrument/<symbol>", methods=["GET"])
+@login_required
 def instrument_endpoint(symbol):
     try:
         stock = instrument_manager.find_stock(symbol)
