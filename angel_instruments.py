@@ -75,11 +75,50 @@ class AngelInstrumentManager:
         return stocks
 
     def find_stock(self, symbol):
-        symbol = str(symbol).upper().strip()
-        if not symbol.endswith("-EQ"):
-            symbol += "-EQ"
+        """Find an NSE equity or NSE index instrument for historical/chart requests."""
+        requested = str(symbol).upper().strip()
+        if not self.instruments and not self.load_cache().get("success"):
+            return None
+
+        # Angel One uses NIFTY, BANKNIFTY, FINNIFTY, etc. for index instruments,
+        # while the dashboard often displays friendly names such as "NIFTY 50".
+        aliases = {
+            "NIFTY 50": "NIFTY",
+            "NIFTY50": "NIFTY",
+            "NIFTY BANK": "BANKNIFTY",
+            "BANK NIFTY": "BANKNIFTY",
+            "BANKNIFTY 50": "BANKNIFTY",
+            "NIFTY FIN SERVICE": "FINNIFTY",
+            "NIFTY FIN SERV": "FINNIFTY",
+            "NIFTY FINANCIAL SERVICES": "FINNIFTY",
+            "NIFTY MIDCAP SELECT": "MIDCPNIFTY",
+        }
+        candidates = [requested, aliases.get(requested, requested)]
+        if requested.endswith("-EQ"):
+            candidates.append(requested[:-3])
+
+        # First look through the complete master for index/market instruments.
+        for item in self.instruments:
+            if not isinstance(item, dict) or str(item.get("exch_seg", "")).upper() != "NSE":
+                continue
+            raw_symbol = str(item.get("symbol", "")).strip().upper()
+            raw_name = str(item.get("name", "")).strip().upper()
+            token = str(item.get("token", "")).strip()
+            if not token:
+                continue
+            if raw_symbol in candidates or raw_name in candidates:
+                return {
+                    "symbol": raw_symbol,
+                    "token": token,
+                    "name": str(item.get("name", "")).strip(),
+                    "exchange": "NSE",
+                    "instrumenttype": str(item.get("instrumenttype", "")).strip(),
+                }
+
+        # Then retain the existing equity behaviour.
+        equity_symbol = requested if requested.endswith("-EQ") else requested + "-EQ"
         for stock in self.get_nse_equities():
-            if stock["symbol"] == symbol:
+            if stock["symbol"] == equity_symbol:
                 return stock
         return None
 
