@@ -1,763 +1,179 @@
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from x10_engine import X10Engine
 from angel_service import AngelOneService
 from angel_instruments import AngelInstrumentManager
 from analysis import TechnicalAnalyzer
+from market_indices import INDEX_DEFINITIONS, build_index_snapshot
 
 
 class AngelScanner:
+    """Angel One market scanner with controlled parallel analysis."""
 
-    def __init__(self, batch_size=10, delay=1.0):
-
+    def __init__(self, batch_size=3, delay=0.1, max_workers=3):
         self.service = AngelOneService()
         self.instrument_manager = AngelInstrumentManager()
         self.x10_engine = X10Engine()
-
-        self.batch_size = batch_size
-        self.delay = delay
-
-    # ==========================================================
-    # ANALYZE ONE STOCK
-    # ==========================================================
+        self.batch_size = max(1, int(batch_size))
+        self.delay = max(0.0, float(delay))
+        self.max_workers = max(1, int(max_workers))
 
     def analyze_stock(self, stock):
-
         symbol = stock.get("symbol")
         token = stock.get("token")
         name = stock.get("name", symbol)
-
         if not symbol or not token:
-            print(
-                "[STOCK] Missing symbol or token."
-            )
             return None
-
-        stock_start = time.time()
-
+        started = time.time()
         try:
-
-            print(
-                f"[STOCK] {symbol} "
-                f"START"
-            )
-
-            # --------------------------------------------------
-            # GET HISTORICAL DATA FROM ANGEL ONE
-            # --------------------------------------------------
-
-            print(
-                f"[STOCK] {symbol} "
-                f"Requesting historical data..."
-            )
-
-            historical_start = time.time()
-
             dataframe = self.service.get_historical_dataframe(
-                symbol=symbol,
-                token=token,
-                days=100,
-                interval="ONE_DAY",
-                exchange="NSE"
+                symbol=symbol, token=token, days=100,
+                interval="ONE_DAY", exchange="NSE"
             )
-
-            historical_time = round(
-                time.time() - historical_start,
-                2
-            )
-
-            print(
-                f"[STOCK] {symbol} "
-                f"Historical data completed in "
-                f"{historical_time}s"
-            )
-
             if dataframe is None or dataframe.empty:
-
-                print(
-                    f"[STOCK] {symbol} "
-                    f"No historical data."
-                )
-
                 return None
 
-            print(
-                f"[STOCK] {symbol} "
-                f"Historical rows: "
-                f"{len(dataframe)}"
-            )
-
-            # --------------------------------------------------
-            # TECHNICAL ANALYSIS
-            # --------------------------------------------------
-
-            print(
-                f"[STOCK] {symbol} "
-                f"Technical analysis START..."
-            )
-
-            technical_start = time.time()
-
-            analyzer = TechnicalAnalyzer(
-                dataframe
-            )
-
-            analysis = analyzer.calculate()
-
-            technical_time = round(
-                time.time() - technical_start,
-                2
-            )
-
-            print(
-                f"[STOCK] {symbol} "
-                f"Technical analysis completed in "
-                f"{technical_time}s"
-            )
-
-            if analysis is None:
-
-                print(
-                    f"[STOCK] {symbol} "
-                    f"Technical analysis returned no result."
-                )
-
+            analysis = TechnicalAnalyzer(dataframe).calculate()
+            if not analysis:
                 return None
-
-            # --------------------------------------------------
-            # X10 ENGINE
-            # --------------------------------------------------
-
-            print(
-                f"[STOCK] {symbol} "
-                f"X10 analysis START..."
-            )
-
-            x10_start = time.time()
-
-            x10_result = self.x10_engine.analyze(
-                analysis
-            )
-
-            x10_time = round(
-                time.time() - x10_start,
-                2
-            )
-
-            print(
-                f"[STOCK] {symbol} "
-                f"X10 analysis completed in "
-                f"{x10_time}s"
-            )
-
-            if x10_result is None:
-
-                print(
-                    f"[STOCK] {symbol} "
-                    f"X10 returned no result."
-                )
-
+            x10 = self.x10_engine.analyze(analysis)
+            if not x10:
                 return None
-
-            # --------------------------------------------------
-            # BASIC VALUES
-            # --------------------------------------------------
-
-            technical_score = analysis.get(
-                "technical_score",
-                0
-            )
-
-            x10_score = x10_result.get(
-                "x10_score",
-                0
-            )
-
-            signal = x10_result.get(
-                "signal",
-                "AVOID"
-            )
-
-            # --------------------------------------------------
-            # EXISTING COMPATIBILITY FIELD
-            #
-            # Kept exactly as before.
-            # This is not a statistical probability.
-            # --------------------------------------------------
-
-            probability = x10_score
-
-            # --------------------------------------------------
-            # FINAL STOCK RESULT
-            # --------------------------------------------------
 
             result = {
-
-                # ------------------------------------------------
-                # IDENTIFICATION
-                # ------------------------------------------------
-
                 "symbol": symbol,
-
                 "token": str(token),
-
                 "name": name,
-
-                # ------------------------------------------------
-                # PRICE
-                # ------------------------------------------------
-
-                "price": analysis.get(
-                    "price",
-                    0
-                ),
-
-                # ------------------------------------------------
-                # SCORES
-                # ------------------------------------------------
-
-                "technical_score": technical_score,
-
-                "x10_score": x10_score,
-
-                "success_probability": probability,
-
-                # ------------------------------------------------
-                # X10 SIGNAL
-                # ------------------------------------------------
-
-                "signal": signal,
-
-                # ------------------------------------------------
-                # TRADE PLAN
-                # ------------------------------------------------
-
-                "entry": x10_result.get(
-                    "entry",
-                    0
-                ),
-
-                "stop_loss": x10_result.get(
-                    "stop_loss",
-                    0
-                ),
-
-                "target": x10_result.get(
-                    "target",
-                    0
-                ),
-
-                "risk": x10_result.get(
-                    "risk",
-                    0
-                ),
-
-                "reward": x10_result.get(
-                    "reward",
-                    0
-                ),
-
-                "risk_reward": x10_result.get(
-                    "risk_reward",
-                    0
-                ),
-
-                # ------------------------------------------------
-                # TREND / MOMENTUM
-                # ------------------------------------------------
-
-                "trend": analysis.get(
-                    "trend",
-                    "Neutral"
-                ),
-
-                "momentum": analysis.get(
-                    "momentum",
-                    "Neutral"
-                ),
-
-                # ------------------------------------------------
-                # RSI
-                # ------------------------------------------------
-
-                "rsi": analysis.get(
-                    "rsi",
-                    0
-                ),
-
-                # ------------------------------------------------
-                # MOVING AVERAGES
-                # ------------------------------------------------
-
-                "ema20": analysis.get(
-                    "ema20",
-                    0
-                ),
-
-                "ema50": analysis.get(
-                    "ema50",
-                    0
-                ),
-
-                "ema200": analysis.get(
-                    "ema200",
-                    0
-                ),
-
-                # ------------------------------------------------
-                # MACD
-                # ------------------------------------------------
-
-                "macd": analysis.get(
-                    "macd",
-                    0
-                ),
-
-                "macd_signal": analysis.get(
-                    "macd_signal",
-                    0
-                ),
-
-                "macd_histogram": analysis.get(
-                    "macd_histogram",
-                    0
-                ),
-
-                # ------------------------------------------------
-                # ADX / DIRECTIONAL MOVEMENT
-                # ------------------------------------------------
-
-                "adx": analysis.get(
-                    "adx",
-                    0
-                ),
-
-                "plus_di": analysis.get(
-                    "plus_di",
-                    0
-                ),
-
-                "minus_di": analysis.get(
-                    "minus_di",
-                    0
-                ),
-
-                # ------------------------------------------------
-                # SUPPORT / RESISTANCE
-                # ------------------------------------------------
-
-                "support": analysis.get(
-                    "support",
-                    0
-                ),
-
-                "resistance": analysis.get(
-                    "resistance",
-                    0
-                ),
-
-                # ------------------------------------------------
-                # VOLUME
-                # ------------------------------------------------
-
-                "volume_ratio": analysis.get(
-                    "volume_ratio",
-                    0
-                ),
-
-                # ------------------------------------------------
-                # VOLATILITY
-                # ------------------------------------------------
-
-                "atr": analysis.get(
-                    "atr",
-                    0
-                ),
-
-                # ------------------------------------------------
-                # 52 WEEK RANGE
-                # ------------------------------------------------
-
-                "52_week_high": analysis.get(
-                    "52_week_high",
-                    0
-                ),
-
-                "52_week_low": analysis.get(
-                    "52_week_low",
-                    0
-                )
+                "price": analysis.get("price", 0),
+                "technical_score": analysis.get("technical_score", 0),
+                "x10_score": x10.get("x10_score", 0),
+                "success_probability": x10.get("x10_score", 0),
+                "signal": x10.get("signal", "AVOID"),
+                "entry": x10.get("entry", 0),
+                "entry_low": x10.get("entry_low", 0),
+                "entry_high": x10.get("entry_high", 0),
+                "stop_loss": x10.get("stop_loss", 0),
+                "target": x10.get("target", 0),
+                "target_1": x10.get("target_1", 0),
+                "target_2": x10.get("target_2", 0),
+                "risk": x10.get("risk", 0),
+                "reward": x10.get("reward", 0),
+                "risk_reward": x10.get("risk_reward", 0),
+                "trailing_stop": x10.get("trailing_stop", 0),
+                "chase_price": x10.get("chase_price", 0),
+                "dont_chase": x10.get("dont_chase", False),
+                "setup_quality": x10.get("setup_quality", "WEAK"),
+                "trend": analysis.get("trend", "Neutral"),
+                "momentum": analysis.get("momentum", "Neutral"),
+                "rsi": analysis.get("rsi", 0),
+                "ema20": analysis.get("ema20", 0),
+                "ema50": analysis.get("ema50", 0),
+                "ema200": analysis.get("ema200", 0),
+                "macd": analysis.get("macd", 0),
+                "macd_signal": analysis.get("macd_signal", 0),
+                "macd_histogram": analysis.get("macd_histogram", 0),
+                "adx": analysis.get("adx", 0),
+                "plus_di": analysis.get("plus_di", 0),
+                "minus_di": analysis.get("minus_di", 0),
+                "support": analysis.get("support", 0),
+                "resistance": analysis.get("resistance", 0),
+                "volume_ratio": analysis.get("volume_ratio", 0),
+                "atr": analysis.get("atr", 0),
+                "52_week_high": analysis.get("52_week_high", 0),
+                "52_week_low": analysis.get("52_week_low", 0),
+                "scan_time": round(time.time() - started, 2),
             }
-
-            total_stock_time = round(
-                time.time() - stock_start,
-                2
-            )
-
-            print(
-                f"[STOCK] {symbol} "
-                f"COMPLETE in "
-                f"{total_stock_time}s "
-                f"| X10 Score: {x10_score} "
-                f"| Signal: {signal}"
-            )
-
             return result
-
         except Exception as error:
-
-            total_stock_time = round(
-                time.time() - stock_start,
-                2
-            )
-
-            print(
-                f"[STOCK] {symbol} "
-                f"ERROR after "
-                f"{total_stock_time}s: "
-                f"{error}"
-            )
-
+            print(f"[STOCK] {symbol} ERROR: {error}")
             return None
 
-    # ==========================================================
-    # SCAN MARKET
-    # ==========================================================
+    def _analyze_batch(self, stocks):
+        results = []
+        workers = min(self.max_workers, len(stocks))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(self.analyze_stock, stock) for stock in stocks]
+            for future in as_completed(futures):
+                result = future.result()
+                if result:
+                    results.append(result)
+                if self.delay:
+                    time.sleep(self.delay)
+        return results
+
+    def _get_index_snapshots(self):
+        snapshots = []
+        for name, definition in INDEX_DEFINITIONS.items():
+            try:
+                quote = self.service.get_quote(
+                    symbol=definition["tradingsymbol"],
+                    token=definition["token"],
+                    exchange=definition["exchange"],
+                )
+                data = (quote.get("data") or {}).get("fetched") or []
+                q = data[0] if data else {}
+                price = float(q.get("ltp", 0) or 0)
+                close = float(q.get("close", 0) or 0)
+                high = float(q.get("high", 0) or 0)
+                low = float(q.get("low", 0) or 0)
+                change = price - close if close else 0
+                change_pct = (change / close * 100) if close else 0
+
+                history = self.service.get_historical_data(
+                    symbol=name, token=definition["token"], days=30,
+                    interval="ONE_DAY", exchange=definition["exchange"]
+                )
+                candles = history.get("data", []) if history.get("success") else []
+                lows = [float(c[3]) for c in candles[-20:] if len(c) >= 5]
+                highs = [float(c[2]) for c in candles[-20:] if len(c) >= 5]
+                support = max(max(lows), low) if lows else low
+                resistance = min(max(highs), high) if highs else high
+                if support >= price > 0:
+                    support = min(low or price, price * 0.995)
+                if resistance <= price and price > 0:
+                    resistance = max(high or price, price * 1.005)
+
+                snapshots.append(build_index_snapshot(
+                    name, price, support, resistance, change, change_pct
+                ))
+            except Exception as error:
+                print(f"[INDEX] {name} ERROR: {error}")
+                snapshots.append(build_index_snapshot(name, 0, 0, 0, 0, 0))
+        return snapshots
 
     def scan_market(self, limit=50):
-
-        start_time = time.time()
-
-        print(
-            "=================================================="
-        )
-
-        print(
-            "X10 MARKET SCANNER STARTING"
-        )
-
-        print(
-            f"Requested limit: {limit}"
-        )
-
-        print(
-            f"Batch size: {self.batch_size}"
-        )
-
-        print(
-            f"Delay: {self.delay}s"
-        )
-
-        print(
-            "=================================================="
-        )
-
+        start = time.time()
         try:
+            login = self.service.login()
+            if not login.get("success"):
+                return {"success": False, "message": login.get("message", "Angel One login failed."), "stocks": []}
 
-            # --------------------------------------------------
-            # LOAD ANGEL ONE INSTRUMENTS
-            # --------------------------------------------------
+            cache = self.instrument_manager.load_cache()
+            if not cache.get("success"):
+                return {"success": False, "message": "Unable to load Angel One instruments.", "stocks": []}
 
-            print(
-                "[SCAN] Loading Angel One instrument cache..."
-            )
-
-            instrument_start = time.time()
-
-            result = (
-                self.instrument_manager
-                .load_cache()
-            )
-
-            instrument_time = round(
-                time.time() - instrument_start,
-                2
-            )
-
-            print(
-                "[SCAN] Instrument loading completed in "
-                f"{instrument_time}s"
-            )
-
-            if not result.get("success"):
-
-                print(
-                    "[SCAN] Instrument loading FAILED:"
-                    f" {result.get('message')}"
-                )
-
-                return {
-
-                    "success": False,
-
-                    "message": (
-                        "Unable to load Angel One instruments."
-                    ),
-
-                    "stocks": []
-                }
-
-            print(
-                "[SCAN] Instruments available: "
-                f"{result.get('count', 0)}"
-            )
-
-            # --------------------------------------------------
-            # GET NSE EQUITIES
-            # --------------------------------------------------
-
-            print(
-                "[SCAN] Getting NSE equity stocks..."
-            )
-
-            equity_start = time.time()
-
-            stocks = (
-                self.instrument_manager
-                .get_nse_equities()
-            )
-
-            equity_time = round(
-                time.time() - equity_start,
-                2
-            )
-
-            print(
-                "[SCAN] NSE equity filtering completed in "
-                f"{equity_time}s"
-            )
-
-            if not stocks:
-
-                print(
-                    "[SCAN] No NSE equity stocks found."
-                )
-
-                return {
-
-                    "success": False,
-
-                    "message": (
-                        "No NSE equity stocks found."
-                    ),
-
-                    "stocks": []
-                }
-
-            print(
-                f"[SCAN] Total NSE equities available: "
-                f"{len(stocks)}"
-            )
-
-            # --------------------------------------------------
-            # LIMIT SCAN
-            # --------------------------------------------------
-
-            stocks = stocks[:limit]
-
-            print(
-                "=================================================="
-            )
-
-            print(
-                f"[SCAN] Starting scan for "
-                f"{len(stocks)} stocks..."
-            )
-
-            print(
-                "=================================================="
-            )
-
+            stocks = self.instrument_manager.get_nse_equities() or []
+            stocks = stocks[:max(1, int(limit))]
             results = []
 
-            # --------------------------------------------------
-            # PROCESS STOCKS
-            # --------------------------------------------------
+            for start_index in range(0, len(stocks), self.batch_size):
+                batch = stocks[start_index:start_index + self.batch_size]
+                results.extend(self._analyze_batch(batch))
 
-            for index, stock in enumerate(
-                stocks,
-                start=1
-            ):
-
-                symbol = stock.get(
-                    "symbol",
-                    "UNKNOWN"
-                )
-
-                print(
-                    ""
-                )
-
-                print(
-                    "--------------------------------------------------"
-                )
-
-                print(
-                    f"[SCAN] STOCK {index}/{len(stocks)}: "
-                    f"{symbol}"
-                )
-
-                print(
-                    "--------------------------------------------------"
-                )
-
-                stock_analysis = (
-                    self.analyze_stock(
-                        stock
-                    )
-                )
-
-                if stock_analysis:
-
-                    results.append(
-                        stock_analysis
-                    )
-
-                    print(
-                        f"[SCAN] {symbol} "
-                        f"ADDED TO RESULTS"
-                    )
-
-                else:
-
-                    print(
-                        f"[SCAN] {symbol} "
-                        f"SKIPPED"
-                    )
-
-                # ------------------------------------------------
-                # DELAY BETWEEN REQUESTS
-                # ------------------------------------------------
-
-                if index < len(stocks):
-
-                    print(
-                        f"[SCAN] Waiting "
-                        f"{self.delay}s before next stock..."
-                    )
-
-                    time.sleep(
-                        self.delay
-                    )
-
-            # --------------------------------------------------
-            # SORT BY X10 SCORE
-            # --------------------------------------------------
-
-            print(
-                "[SCAN] Sorting results by X10 score..."
-            )
-
-            results.sort(
-                key=lambda item: item.get(
-                    "x10_score",
-                    0
-                ),
-                reverse=True
-            )
-
-            # --------------------------------------------------
-            # TOP OPPORTUNITIES
-            # --------------------------------------------------
-
+            results.sort(key=lambda item: item.get("x10_score", 0), reverse=True)
             top_stocks = results[:20]
-
-            # --------------------------------------------------
-            # SCAN TIME
-            # --------------------------------------------------
-
-            elapsed = round(
-                time.time() - start_time,
-                2
-            )
-
-            print(
-                "=================================================="
-            )
-
-            print(
-                "[SCAN] X10 SCANNER COMPLETED"
-            )
-
-            print(
-                f"[SCAN] Scanned: {len(stocks)}"
-            )
-
-            print(
-                f"[SCAN] Successful: {len(results)}"
-            )
-
-            print(
-                f"[SCAN] Returned: {len(top_stocks)}"
-            )
-
-            print(
-                f"[SCAN] Total time: {elapsed}s"
-            )
-
-            print(
-                "=================================================="
-            )
-
-            # --------------------------------------------------
-            # FINAL RESPONSE
-            # --------------------------------------------------
-
+            indices = self._get_index_snapshots()
+            elapsed = round(time.time() - start, 2)
             return {
-
                 "success": True,
-
-                "count": len(
-                    top_stocks
-                ),
-
-                "scanned": len(
-                    stocks
-                ),
-
-                "successful": len(
-                    results
-                ),
-
+                "count": len(top_stocks),
+                "scanned": len(stocks),
+                "successful": len(results),
                 "time_seconds": elapsed,
-
-                "stocks": top_stocks
+                "stocks": top_stocks,
+                "indices": indices,
             }
-
         except Exception as error:
-
-            elapsed = round(
-                time.time() - start_time,
-                2
-            )
-
-            print(
-                "=================================================="
-            )
-
-            print(
-                "MARKET SCANNER ERROR"
-            )
-
-            print(
-                f"Time before error: {elapsed}s"
-            )
-
-            print(
-                f"Error: {error}"
-            )
-
-            print(
-                "=================================================="
-            )
-
-            return {
-
-                "success": False,
-
-                "message": str(
-                    error
-                ),
-
-                "stocks": []
-            }
+            print(f"MARKET SCANNER ERROR: {error}")
+            return {"success": False, "message": str(error), "stocks": []}
