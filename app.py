@@ -1,4 +1,6 @@
 import os
+import threading
+import time
 from functools import wraps
 
 from flask import Flask, jsonify, render_template, request, redirect, url_for, session
@@ -21,6 +23,20 @@ instrument_manager = AngelInstrumentManager()
 APP_USER_ID = "Admin"
 APP_PASSWORD = "Admin"
 
+# ---------------------------------------------------------------------------
+# Background market cache
+# ---------------------------------------------------------------------------
+# The X10 engine and Angel One scanner remain unchanged.  The dashboard no
+# longer has to wait for a complete market scan on every page request.
+SCAN_REFRESH_SECONDS = max(60, int(os.getenv("X10_SCAN_REFRESH_SECONDS", "180")))
+_scan_lock = threading.Lock()
+_scan_state = {
+    "result": None,
+    "updated_at": 0.0,
+    "refreshing": False,
+    "last_error": None,
+}
+
 
 def is_authenticated():
     return session.get("authenticated") is True
@@ -35,6 +51,104 @@ def login_required(view):
             return redirect(url_for("login"))
         return view(*args, **kwargs)
     return wrapped
+
+
+def _run_market_scan():
+    """Run one X10 scan in the background and publish it atomically."""
+    with _scan_lock:
+        if _scan_state["refreshing"]:
+            return False
+        _scan_state["refreshing"] = True
+
+    started = time.time()
+    try:
+        scanner = AngelScanner(batch_size=5, delay=0.03, max_workers=5)
+        result = scanner.scan_market(limit=30)
+        if not result.get("success"):
+            raise RuntimeError(result.get("message", "Angel One scanner failed."))
+
+        stocks = [clean_stock(stock) for stock in result.get("stocks", []) if isinstance(stock, dict)]
+        payload = {
+            "success": True,
+            "message": "Market scan completed.",
+            "count": len(stocks),
+            "scanned": result.get("scanned", 0),
+            "successful": result.get("successful", 0),
+            "time_seconds": result.get("time_seconds", round(time.time() - started, 2)),
+            "stocks": stocks,
+            "indices": result.get("indices", []),
+            "updated_at": time.time(),
+        }
+        with _scan_lock:
+            _scan_state["result"] = payload
+            _scan_state["updated_at"] = payload["updated_at"]
+            _scan_state["last_error"] = None
+        return True
+    except Exception as error:
+        print("BACKGROUND X10 SCANNER ERROR:", error)
+        with _scan_lock:
+            _scan_state["last_error"] = str(error)
+        return False
+    finally:
+        with _scan_lock:
+            _scan_state["refreshing"] = False
+
+
+def _ensure_scan_refresh(force=False):
+    """Start a scan without blocking the HTTP request."""
+    with _scan_lock:
+        age = time.time() - _scan_state["updated_at"] if _scan_state["updated_at"] else None
+        refreshing = _scan_state["refreshing"]
+        stale = age is None or age >= SCAN_REFRESH_SECONDS
+
+    if (force or stale) and not refreshing:
+        thread = threading.Thread(target=_run_market_scan, name="x10-market-scan", daemon=True)
+        thread.start()
+
+
+def _snapshot_response():
+    with _scan_lock:
+        result = _scan_state["result"]
+        updated_at = _scan_state["updated_at"]
+        refreshing = _scan_state["refreshing"]
+        last_error = _scan_state["last_error"]
+
+    if result:
+        payload = dict(result)
+        payload["refreshing"] = refreshing
+        payload["cache_age_seconds"] = round(max(0, time.time() - updated_at), 1)
+        payload["stale"] = payload["cache_age_seconds"] >= SCAN_REFRESH_SECONDS
+        return payload
+
+    return {
+        "success": True,
+        "message": "Market scan is warming up in the background.",
+        "count": 0,
+        "scanned": 0,
+        "successful": 0,
+        "time_seconds": 0,
+        "stocks": [],
+        "indices": [],
+        "refreshing": refreshing,
+        "cache_age_seconds": None,
+        "stale": True,
+        "last_error": last_error,
+    }
+
+
+def _background_refresh_loop():
+    # Wait briefly so Flask can finish booting before the first broker call.
+    time.sleep(2)
+    while True:
+        try:
+            _ensure_scan_refresh()
+        except Exception as error:
+            print("BACKGROUND REFRESH LOOP ERROR:", error)
+        time.sleep(15)
+
+
+# Start one daemon worker per Python process. It never blocks page rendering.
+threading.Thread(target=_background_refresh_loop, name="x10-refresh-loop", daemon=True).start()
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -121,32 +235,30 @@ def clean_stock(stock):
 @app.route("/api/scan", methods=["GET"])
 @login_required
 def scan():
-    try:
-        scanner = AngelScanner(batch_size=5, delay=0.03, max_workers=5)
-        result = scanner.scan_market(limit=30)
-        if not result.get("success"):
-            return jsonify({"success": False, "message": result.get("message", "Angel One scanner failed."), "stocks": [], "indices": [], "count": 0, "scanned": 0, "successful": 0}), 200
-        stocks = [clean_stock(stock) for stock in result.get("stocks", []) if isinstance(stock, dict)]
-        return jsonify({"success": True, "message": "Market scan completed.", "count": len(stocks), "scanned": result.get("scanned", 0),
-                        "successful": result.get("successful", 0), "time_seconds": result.get("time_seconds", 0),
-                        "stocks": stocks, "indices": result.get("indices", [])})
-    except Exception as error:
-        print("X10 SCANNER API ERROR:", error)
-        return jsonify({"success": False, "message": str(error), "stocks": [], "indices": [], "count": 0, "scanned": 0, "successful": 0}), 200
+    # Fast path: return the latest completed scan and refresh stale data in the
+    # background. This preserves the scanner while removing its latency from
+    # every browser request.
+    _ensure_scan_refresh()
+    return jsonify(_snapshot_response())
+
+
+@app.route("/api/scan/refresh", methods=["GET"])
+@login_required
+def scan_refresh():
+    _ensure_scan_refresh(force=True)
+    return jsonify({"success": True, "message": "X10 scan refresh started in background.", "refreshing": True})
 
 
 @app.route("/api/indices", methods=["GET"])
 @login_required
 def indices_endpoint():
-    try:
-        scanner = AngelScanner(max_workers=1)
-        login_result = scanner.service.login()
-        if not login_result.get("success"):
-            return jsonify({"success": False, "message": login_result.get("message", "Angel One login failed."), "indices": []}), 200
-        indices = scanner._get_index_snapshots()
-        return jsonify({"success": True, "indices": indices})
-    except Exception as error:
-        return jsonify({"success": False, "message": str(error), "indices": []}), 200
+    # Prefer the same completed scan snapshot so indices don't trigger a
+    # second Angel One login/history workload immediately after page load.
+    _ensure_scan_refresh()
+    snapshot = _snapshot_response()
+    if snapshot.get("indices"):
+        return jsonify({"success": True, "indices": snapshot["indices"], "cached": True, "refreshing": snapshot.get("refreshing", False)})
+    return jsonify({"success": True, "indices": [], "cached": True, "refreshing": snapshot.get("refreshing", False)})
 
 
 @app.route("/api/historical/<symbol>", methods=["GET"])
@@ -202,7 +314,7 @@ def instrument_endpoint(symbol):
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "service": "X10 MarketAI"})
+    return jsonify({"status": "ok", "service": "Azad AI Plus"})
 
 
 if __name__ == "__main__":
