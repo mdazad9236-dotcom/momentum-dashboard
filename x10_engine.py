@@ -47,6 +47,20 @@ class X10Engine:
     def _round(value):
         return round(float(value), 2)
 
+    @staticmethod
+    def _format_risk_reward(value):
+        """Return a trader-friendly ratio such as 1:2, 1:2.4 or 1:3."""
+        try:
+            ratio = float(value)
+        except (TypeError, ValueError):
+            return "1:0"
+        if ratio <= 0:
+            return "1:0"
+        rounded = round(ratio, 1)
+        if rounded.is_integer():
+            return f"1:{int(rounded)}"
+        return f"1:{rounded:.1f}"
+
     def calculate_trade_plan(self, analysis):
         price = float(analysis.get("price", 0) or 0)
         support = float(analysis.get("support", 0) or 0)
@@ -57,8 +71,8 @@ class X10Engine:
             return {"entry": 0, "entry_low": 0, "entry_high": 0,
                     "stop_loss": 0, "target": 0, "target_1": 0,
                     "target_2": 0, "risk": 0, "reward": 0,
-                    "risk_reward": 0, "trailing_stop": 0,
-                    "chase_price": 0, "dont_chase": True,
+                    "risk_reward": 0, "risk_reward_value": 0,
+                    "trailing_stop": 0, "chase_price": 0, "dont_chase": True,
                     "setup_quality": "INVALID"}
 
         if support > 0 and support < price:
@@ -85,12 +99,13 @@ class X10Engine:
             target_1 = entry + max(atr * 2.0, entry * 0.04)
         target_2 = max(entry + max(atr * 3.5, entry * 0.07), target_1 + max(atr, entry * 0.02))
         reward = target_1 - entry
-        risk_reward = reward / risk if risk > 0 else 0
+        risk_reward_value = reward / risk if risk > 0 else 0
+        risk_reward = self._format_risk_reward(risk_reward_value)
 
         chase_price = entry_high + max(atr * 0.50, price * 0.01)
         dont_chase = price > chase_price
-        if risk_reward >= 2.0 and not dont_chase: setup_quality = "GOOD"
-        elif risk_reward >= 1.5 and not dont_chase: setup_quality = "FAIR"
+        if risk_reward_value >= 2.0 and not dont_chase: setup_quality = "GOOD"
+        elif risk_reward_value >= 1.5 and not dont_chase: setup_quality = "FAIR"
         else: setup_quality = "WEAK"
 
         return {
@@ -103,7 +118,8 @@ class X10Engine:
             "target_2": self._round(target_2),
             "risk": self._round(risk),
             "reward": self._round(reward),
-            "risk_reward": self._round(risk_reward),
+            "risk_reward": risk_reward,
+            "risk_reward_value": self._round(risk_reward_value),
             "trailing_stop": self._round(max(entry, target_1 * 0.97)),
             "chase_price": self._round(chase_price),
             "dont_chase": dont_chase,
@@ -129,6 +145,7 @@ class X10Engine:
             "risk": plan["risk"],
             "reward": plan["reward"],
             "risk_reward": plan["risk_reward"],
+            "risk_reward_value": plan["risk_reward_value"],
             "trailing_stop": plan["trailing_stop"],
             "chase_price": plan["chase_price"],
             "dont_chase": plan["dont_chase"],
