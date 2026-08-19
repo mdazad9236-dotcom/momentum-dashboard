@@ -103,6 +103,26 @@ def _background_refresh_loop():
         time.sleep(15)
 threading.Thread(target=_background_refresh_loop, name="x10-refresh-loop", daemon=True).start()
 
+@app.route("/api/historical/<path:symbol>")
+@login_required
+def historical(symbol):
+    """Return Angel One historical candles for an individual stock or index."""
+    try:
+        instrument = instrument_manager.find_stock(symbol)
+        if not instrument:
+            return jsonify({"success": False, "message": f"Angel One instrument not found: {symbol}", "data": []}), 404
+        result = angel_service.get_historical_data(
+            instrument["symbol"],
+            instrument["token"],
+            days=400,
+            interval="ONE_DAY",
+            exchange=instrument.get("exchange", "NSE"),
+        )
+        return jsonify(result), (200 if result.get("success") else 502)
+    except Exception as error:
+        print("HISTORICAL API ERROR:", error)
+        return jsonify({"success": False, "message": str(error), "data": []}), 500
+
 @app.after_request
 def inject_angel_chart(response):
     if request.path != "/" or "text/html" not in response.content_type:
