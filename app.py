@@ -115,7 +115,7 @@ threading.Thread(target=_background_refresh_loop, name="x10-refresh-loop", daemo
 
 @app.after_request
 def inject_angel_chart(response):
-    """Override the old chart function with a self-contained Angel One OHLC chart."""
+    """Inject the self-contained Angel One OHLC chart into the existing dashboard."""
     if request.path != "/" or "text/html" not in response.content_type:
         return response
     try:
@@ -124,17 +124,16 @@ def inject_angel_chart(response):
             return response
         fix = r'''<script>
 (function(){
-  const originalText = 'TradingView';
   function parseCandle(x){
     if(Array.isArray(x)) return {t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+(x[5]||0)};
-    return {t:x.date||x.timestamp||x.time||x.ts,o:+(x.open??x.Open),h:+(x.high??x.High),l:+(x.low??x.Low),c:+(x.close??x.Close),v:+(x.volume??x.Volume||0)};
+    return {t:x.date||x.timestamp||x.time||x.ts,o:+(x.open??x.Open),h:+(x.high??x.High),l:+(x.low??x.Low),c:+(x.close??x.Close),v:+(x.volume??x.Volume??0)};
   }
-  function drawChart(box, candles, symbol){
-    box.innerHTML=''; box.style.position='relative'; box.style.overflow='hidden';
+  function drawChart(box,candles,symbol){
+    box.innerHTML='';box.style.position='relative';box.style.overflow='hidden';
     const head=document.createElement('div');
     head.style.cssText='position:absolute;z-index:2;left:14px;top:10px;font:700 12px Inter,Arial;color:#dce9f5;background:rgba(7,17,31,.72);padding:6px 9px;border-radius:7px';
-    head.textContent='ANGEL ONE · '+symbol+' · DAILY'; box.appendChild(head);
-    const canvas=document.createElement('canvas'); canvas.style.cssText='width:100%;height:100%;display:block'; box.appendChild(canvas);
+    head.textContent='ANGEL ONE · '+symbol+' · DAILY';box.appendChild(head);
+    const canvas=document.createElement('canvas');canvas.style.cssText='width:100%;height:100%;display:block';box.appendChild(canvas);
     const ctx=canvas.getContext('2d');
     const resize=()=>{
       const dpr=window.devicePixelRatio||1,w=Math.max(320,box.clientWidth),h=Math.max(280,box.clientHeight);
@@ -143,36 +142,23 @@ def inject_angel_chart(response):
       const data=candles.slice(-120),pad={l:54,r:18,t:38,b:62},cw=w-pad.l-pad.r,ch=h-pad.t-pad.b;
       const max=Math.max(...data.map(d=>d.h)),min=Math.min(...data.map(d=>d.l));
       const span=(max-min)||1,volMax=Math.max(...data.map(d=>d.v||0),1),volH=Math.min(70,ch*.18),priceH=ch-volH-12;
-      const py=p=>pad.t+(max-p)/span*priceH; const step=cw/data.length; const body=Math.max(2,step*.62);
-      ctx.fillStyle='#07111f';ctx.fillRect(0,0,w,h);
-      ctx.strokeStyle='#183149';ctx.lineWidth=1;ctx.fillStyle='#71879b';ctx.font='10px Arial';
+      const py=p=>pad.t+(max-p)/span*priceH,step=cw/data.length,body=Math.max(2,step*.62);
+      ctx.fillStyle='#07111f';ctx.fillRect(0,0,w,h);ctx.strokeStyle='#183149';ctx.lineWidth=1;ctx.fillStyle='#71879b';ctx.font='10px Arial';
       for(let i=0;i<5;i++){const y=pad.t+(priceH/4)*i;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();const val=max-span*i/4;ctx.fillText(val.toFixed(2),7,y+3);}
-      const start=Math.max(0,data.length-6);
-      data.forEach((d,i)=>{const x=pad.l+i*step+step/2,up=d.c>=d.o,yO=py(d.o),yC=py(d.c),yH=py(d.h),yL=py(d.l);ctx.strokeStyle=up?'#20d18b':'#ff5d6c';ctx.fillStyle=ctx.strokeStyle;ctx.beginPath();ctx.moveTo(x,yH);ctx.lineTo(x,yL);ctx.stroke();ctx.fillRect(x-body/2,Math.min(yO,yC),body,Math.max(1,Math.abs(yC-yO)));if(i%Math.ceil(data.length/6)===0||i>=start){const dt=new Date(d.t);const label=isNaN(dt)?String(d.t).slice(0,10):dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});ctx.fillStyle='#71879b';ctx.fillText(label,x-18,h-20);}});
-      const volTop=pad.t+priceH+12;data.forEach((d,i)=>{const x=pad.l+i*step+step/2;const vh=((d.v||0)/volMax)*volH;ctx.fillStyle=d.c>=d.o?'rgba(32,209,139,.45)':'rgba(255,93,108,.45)';ctx.fillRect(x-body/2,volTop+volH-vh,body,vh);});
-      ctx.fillStyle='#71879b';ctx.fillText('Volume',pad.l,volTop+volH+18);
-      const last=data[data.length-1];ctx.fillStyle=last.c>=last.o?'#20d18b':'#ff5d6c';ctx.font='800 14px Arial';ctx.fillText('₹'+last.c.toFixed(2),w-pad.r-82,pad.t+18);
+      data.forEach((d,i)=>{const x=pad.l+i*step+step/2,up=d.c>=d.o,yO=py(d.o),yC=py(d.c),yH=py(d.h),yL=py(d.l);ctx.strokeStyle=up?'#20d18b':'#ff5d6c';ctx.fillStyle=ctx.strokeStyle;ctx.beginPath();ctx.moveTo(x,yH);ctx.lineTo(x,yL);ctx.stroke();ctx.fillRect(x-body/2,Math.min(yO,yC),body,Math.max(1,Math.abs(yC-yO)));if(i%Math.ceil(data.length/6)===0){const dt=new Date(d.t);const label=isNaN(dt)?String(d.t).slice(0,10):dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});ctx.fillStyle='#71879b';ctx.fillText(label,x-18,h-20);}});
+      const volTop=pad.t+priceH+12;data.forEach((d,i)=>{const x=pad.l+i*step+step/2,vh=((d.v||0)/volMax)*volH;ctx.fillStyle=d.c>=d.o?'rgba(32,209,139,.45)':'rgba(255,93,108,.45)';ctx.fillRect(x-body/2,volTop+volH-vh,body,vh);});
+      ctx.fillStyle='#71879b';ctx.fillText('Volume',pad.l,volTop+volH+18);const last=data[data.length-1];ctx.fillStyle=last.c>=last.o?'#20d18b':'#ff5d6c';ctx.font='800 14px Arial';ctx.fillText('₹'+last.c.toFixed(2),w-pad.r-82,pad.t+18);
     };
-    new ResizeObserver(resize).observe(box); resize();
+    if(window.ResizeObserver)new ResizeObserver(resize).observe(box);resize();
   }
-  window.loadChart = async function(sym){
-    let raw=(sym||(document.getElementById('tv')||{}).value||'NIFTY').toUpperCase().trim().replace(/^NSE:/,'').replace(/[^A-Z0-9_]/g,'');
-    if(!raw)raw='NIFTY';
-    const input=document.getElementById('tv');if(input)input.value=raw;
-    const box=document.getElementById('chartBox');if(!box)return;
+  window.loadChart=async function(sym){
+    let raw=(sym||(document.getElementById('tv')||{}).value||'NIFTY').toUpperCase().trim().replace(/^NSE:/,'').replace(/[^A-Z0-9_]/g,'');if(!raw)raw='NIFTY';
+    const input=document.getElementById('tv');if(input)input.value=raw;const box=document.getElementById('chartBox');if(!box)return;
     box.innerHTML='<div class="empty">Loading Angel One candles for '+raw+'…</div>';
-    try{
-      const r=await fetch('/api/historical/'+encodeURIComponent(raw),{cache:'no-store'});const j=await r.json();
-      if(!r.ok||!j.success)throw new Error(j.message||'Angel One historical data unavailable.');
-      const candles=(j.data||j.candles||[]).map(parseCandle).filter(d=>[d.o,d.h,d.l,d.c].every(Number.isFinite));
-      if(!candles.length)throw new Error('Angel One returned no candle data for '+raw+'.');
-      drawChart(box,candles,raw);
-    }catch(e){box.innerHTML='<div class="empty">Angel One chart error: '+String(e.message||e)+'</div>';}
+    try{const r=await fetch('/api/historical/'+encodeURIComponent(raw),{cache:'no-store'}),j=await r.json();if(!r.ok||!j.success)throw new Error(j.message||'Angel One historical data unavailable.');const candles=(j.data||j.candles||[]).map(parseCandle).filter(d=>[d.o,d.h,d.l,d.c].every(Number.isFinite));if(!candles.length)throw new Error('Angel One returned no candle data for '+raw+'.');drawChart(box,candles,raw);}catch(e){box.innerHTML='<div class="empty">Angel One chart error: '+String(e.message||e)+'</div>';}
   };
   window.addEventListener('load',function(){setTimeout(function(){if(document.getElementById('chartBox'))window.loadChart('NIFTY');},150);});
-  setTimeout(function(){
-    const links=document.querySelectorAll('a[href="#chart"]');links.forEach(a=>a.addEventListener('click',function(){setTimeout(function(){if(document.getElementById('chartBox'))window.loadChart();},50);}));
-  },0);
+  setTimeout(function(){document.querySelectorAll('a[href="#chart"]').forEach(function(a){a.addEventListener('click',function(){setTimeout(function(){if(document.getElementById('chartBox'))window.loadChart();},50);});});},0);
 })();
 </script>'''
         html=html.replace('</body>',fix+'</body>')
@@ -301,19 +287,16 @@ def ai_assistant():
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
         return jsonify({"success": False, "message": "AI Assistant is not configured yet. Add OPENAI_API_KEY to the Render environment variables."}), 503
-
     body = request.get_json(silent=True) or {}
     question = str(body.get("message", "")).strip()
     if not question:
         return jsonify({"success": False, "message": "Please enter a stock or market question."}), 400
     if len(question) > 4000:
         question = question[:4000]
-
     snapshot = _snapshot_response()
     context = {"indices": snapshot.get("indices", []), "top_stocks": snapshot.get("stocks", [])[:12], "updated_at": snapshot.get("updated_at")}
     system_prompt = """You are Azad AI Plus, a concise Indian stock-market research assistant. Answer questions about NSE/BSE stocks, indices, technical analysis, market structure, corporate developments and current market news. For anything time-sensitive, especially current news, today's market, recent events, prices or announcements, use web search and clearly distinguish confirmed facts from interpretation. Use the supplied live X10/Angel One snapshot when relevant. Never invent prices, news, targets or company facts. If the user asks whether to buy, provide a decision-support view with bull case, bear case, key levels and risk; do not present certainty or guaranteed returns. Prefer Indian market terminology and INR. Keep answers practical and easy to read. Mention when information is delayed or requires confirmation from the live broker feed."""
     user_prompt = f"User question:\n{question}\n\nCurrent Azad AI Plus market snapshot:\n{context}\n\nAnswer the user's question directly. If current news is requested, search the web before answering and include publication/source names and dates."
-
     payload = {"model": os.getenv("OPENAI_MODEL", "gpt-5.6-luna"), "input": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "tools": [{"type": "web_search"}], "max_output_tokens": 1400}
     try:
         response = requests.post("https://api.openai.com/v1/responses", headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json=payload, timeout=45)
