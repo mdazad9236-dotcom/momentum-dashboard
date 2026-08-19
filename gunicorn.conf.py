@@ -1,19 +1,11 @@
-"""Gunicorn runtime hooks for the Azad AI Plus dashboard.
-
-Keeps the existing Flask application intact while adding the individual
-instrument historical-data endpoint and the approved single-page popup layout.
-"""
-
-import json
-import threading
+"""Gunicorn runtime hooks for the Azad AI Plus dashboard."""
 
 
 def post_worker_init(worker):
     app_module = __import__("app")
     flask_app = app_module.app
 
-    # Register the historical endpoint once per worker.  The front-end uses
-    # this endpoint for both stocks and indices.
+    # The frontend uses this endpoint for both stocks and indices.
     if "historical_external" not in flask_app.view_functions:
         def historical_external(symbol):
             from flask import jsonify
@@ -42,12 +34,9 @@ def post_worker_init(worker):
             methods=["GET"],
         )
 
-    # Make the existing popup a single analysis workspace:
-    # chart on the left, Stock/Index DNA and Trade Plan on the right.
+    # Single-page popup: chart on the left, DNA and Trade Plan on the right.
     @flask_app.after_request
     def azad_single_page_popup(response):
-        if flask_app.request_context if False else False:
-            pass
         try:
             from flask import request
             if request.path != "/" or "text/html" not in response.content_type:
