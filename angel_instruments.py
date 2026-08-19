@@ -93,6 +93,7 @@ class AngelInstrumentManager:
 
     def find_stock(self, symbol):
         requested = str(symbol).upper().strip()
+        requested = requested.replace(".NS", "")
         if not self.instruments and not self.load_cache().get("success"):
             return None
         aliases = {
@@ -104,6 +105,11 @@ class AngelInstrumentManager:
         candidates = [requested, aliases.get(requested, requested)]
         if requested.endswith("-EQ"):
             candidates.append(requested[:-3])
+        elif requested.endswith("EQ"):
+            # The frontend chart normalizer may remove the hyphen from Angel One
+            # symbols such as SBIN-EQ. Restore that canonical form for lookup.
+            candidates.append(requested[:-2] + "-EQ")
+            candidates.append(requested[:-2])
         for item in self.instruments:
             if not isinstance(item, dict) or str(item.get("exch_seg", "")).upper() != "NSE":
                 continue
