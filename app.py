@@ -113,6 +113,76 @@ def _background_refresh_loop():
 threading.Thread(target=_background_refresh_loop, name="x10-refresh-loop", daemon=True).start()
 
 
+@app.after_request
+def inject_angel_chart(response):
+    """Override the old chart function with a self-contained Angel One OHLC chart."""
+    if request.path != "/" or "text/html" not in response.content_type:
+        return response
+    try:
+        html = response.get_data(as_text=True)
+        if 'id="chartBox"' not in html:
+            return response
+        fix = r'''<script>
+(function(){
+  const originalText = 'TradingView';
+  function parseCandle(x){
+    if(Array.isArray(x)) return {t:x[0],o:+x[1],h:+x[2],l:+x[3],c:+x[4],v:+(x[5]||0)};
+    return {t:x.date||x.timestamp||x.time||x.ts,o:+(x.open??x.Open),h:+(x.high??x.High),l:+(x.low??x.Low),c:+(x.close??x.Close),v:+(x.volume??x.Volume||0)};
+  }
+  function drawChart(box, candles, symbol){
+    box.innerHTML=''; box.style.position='relative'; box.style.overflow='hidden';
+    const head=document.createElement('div');
+    head.style.cssText='position:absolute;z-index:2;left:14px;top:10px;font:700 12px Inter,Arial;color:#dce9f5;background:rgba(7,17,31,.72);padding:6px 9px;border-radius:7px';
+    head.textContent='ANGEL ONE · '+symbol+' · DAILY'; box.appendChild(head);
+    const canvas=document.createElement('canvas'); canvas.style.cssText='width:100%;height:100%;display:block'; box.appendChild(canvas);
+    const ctx=canvas.getContext('2d');
+    const resize=()=>{
+      const dpr=window.devicePixelRatio||1,w=Math.max(320,box.clientWidth),h=Math.max(280,box.clientHeight);
+      canvas.width=w*dpr;canvas.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
+      if(!candles.length){ctx.fillStyle='#8397ab';ctx.font='12px Arial';ctx.fillText('No Angel One candle data available.',20,40);return;}
+      const data=candles.slice(-120),pad={l:54,r:18,t:38,b:62},cw=w-pad.l-pad.r,ch=h-pad.t-pad.b;
+      const max=Math.max(...data.map(d=>d.h)),min=Math.min(...data.map(d=>d.l));
+      const span=(max-min)||1,volMax=Math.max(...data.map(d=>d.v||0),1),volH=Math.min(70,ch*.18),priceH=ch-volH-12;
+      const py=p=>pad.t+(max-p)/span*priceH; const step=cw/data.length; const body=Math.max(2,step*.62);
+      ctx.fillStyle='#07111f';ctx.fillRect(0,0,w,h);
+      ctx.strokeStyle='#183149';ctx.lineWidth=1;ctx.fillStyle='#71879b';ctx.font='10px Arial';
+      for(let i=0;i<5;i++){const y=pad.t+(priceH/4)*i;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();const val=max-span*i/4;ctx.fillText(val.toFixed(2),7,y+3);}
+      const start=Math.max(0,data.length-6);
+      data.forEach((d,i)=>{const x=pad.l+i*step+step/2,up=d.c>=d.o,yO=py(d.o),yC=py(d.c),yH=py(d.h),yL=py(d.l);ctx.strokeStyle=up?'#20d18b':'#ff5d6c';ctx.fillStyle=ctx.strokeStyle;ctx.beginPath();ctx.moveTo(x,yH);ctx.lineTo(x,yL);ctx.stroke();ctx.fillRect(x-body/2,Math.min(yO,yC),body,Math.max(1,Math.abs(yC-yO)));if(i%Math.ceil(data.length/6)===0||i>=start){const dt=new Date(d.t);const label=isNaN(dt)?String(d.t).slice(0,10):dt.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});ctx.fillStyle='#71879b';ctx.fillText(label,x-18,h-20);}});
+      const volTop=pad.t+priceH+12;data.forEach((d,i)=>{const x=pad.l+i*step+step/2;const vh=((d.v||0)/volMax)*volH;ctx.fillStyle=d.c>=d.o?'rgba(32,209,139,.45)':'rgba(255,93,108,.45)';ctx.fillRect(x-body/2,volTop+volH-vh,body,vh);});
+      ctx.fillStyle='#71879b';ctx.fillText('Volume',pad.l,volTop+volH+18);
+      const last=data[data.length-1];ctx.fillStyle=last.c>=last.o?'#20d18b':'#ff5d6c';ctx.font='800 14px Arial';ctx.fillText('₹'+last.c.toFixed(2),w-pad.r-82,pad.t+18);
+    };
+    new ResizeObserver(resize).observe(box); resize();
+  }
+  window.loadChart = async function(sym){
+    let raw=(sym||(document.getElementById('tv')||{}).value||'NIFTY').toUpperCase().trim().replace(/^NSE:/,'').replace(/[^A-Z0-9_]/g,'');
+    if(!raw)raw='NIFTY';
+    const input=document.getElementById('tv');if(input)input.value=raw;
+    const box=document.getElementById('chartBox');if(!box)return;
+    box.innerHTML='<div class="empty">Loading Angel One candles for '+raw+'…</div>';
+    try{
+      const r=await fetch('/api/historical/'+encodeURIComponent(raw),{cache:'no-store'});const j=await r.json();
+      if(!r.ok||!j.success)throw new Error(j.message||'Angel One historical data unavailable.');
+      const candles=(j.data||j.candles||[]).map(parseCandle).filter(d=>[d.o,d.h,d.l,d.c].every(Number.isFinite));
+      if(!candles.length)throw new Error('Angel One returned no candle data for '+raw+'.');
+      drawChart(box,candles,raw);
+    }catch(e){box.innerHTML='<div class="empty">Angel One chart error: '+String(e.message||e)+'</div>';}
+  };
+  window.addEventListener('load',function(){setTimeout(function(){if(document.getElementById('chartBox'))window.loadChart('NIFTY');},150);});
+  setTimeout(function(){
+    const links=document.querySelectorAll('a[href="#chart"]');links.forEach(a=>a.addEventListener('click',function(){setTimeout(function(){if(document.getElementById('chartBox'))window.loadChart();},50);}));
+  },0);
+})();
+</script>'''
+        html=html.replace('</body>',fix+'</body>')
+        html=html.replace('TradingView Chart','Angel One Chart').replace('Reliable direct TradingView embed','Angel One OHLC candles')
+        response.set_data(html)
+    except Exception as error:
+        print('ANGEL CHART INJECTION ERROR:',error)
+    return response
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if is_authenticated():
