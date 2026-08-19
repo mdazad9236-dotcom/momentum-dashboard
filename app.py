@@ -113,75 +113,6 @@ def _background_refresh_loop():
 threading.Thread(target=_background_refresh_loop, name="x10-refresh-loop", daemon=True).start()
 
 
-@app.after_request
-def inject_tradingview_fix(response):
-    """Replace the fragile iframe chart function with TradingView's official widget loader."""
-    if request.path != "/" or "text/html" not in response.content_type:
-        return response
-    try:
-        html = response.get_data(as_text=True)
-        if "id=\"chartBox\"" not in html or "function loadChart" not in html:
-            return response
-        fix = r'''<script>
-(function(){
-  window.loadChart = function(sym){
-    var raw = (sym || (document.getElementById('tv') || {}).value || 'NIFTY').toUpperCase().trim();
-    raw = raw.replace(/^NSE:/,'').replace(/[^A-Z0-9_]/g,'');
-    if(!raw) raw='NIFTY';
-    var input=document.getElementById('tv'); if(input) input.value=raw;
-    var box=document.getElementById('chartBox');
-    if(!box) return;
-    box.innerHTML='';
-    var wrap=document.createElement('div');
-    wrap.className='tradingview-widget-container';
-    wrap.style.width='100%'; wrap.style.height='100%';
-    var chart=document.createElement('div');
-    chart.className='tradingview-widget-container__widget';
-    chart.style.width='100%'; chart.style.height='100%';
-    wrap.appendChild(chart);
-    var note=document.createElement('div');
-    note.style.cssText='position:absolute;left:-9999px';
-    note.textContent='TradingView';
-    wrap.appendChild(note);
-    box.style.position='relative';
-    box.appendChild(wrap);
-    var script=document.createElement('script');
-    script.type='text/javascript';
-    script.async=true;
-    script.src='https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
-    script.text=JSON.stringify({
-      autosize:true,
-      symbol:'NSE:'+raw,
-      interval:'D',
-      timezone:'Asia/Kolkata',
-      theme:'dark',
-      style:'1',
-      locale:'en',
-      allow_symbol_change:true,
-      hide_side_toolbar:false,
-      hide_top_toolbar:false,
-      hide_legend:false,
-      save_image:false,
-      calendar:false,
-      support_host:'https://www.tradingview.com'
-    });
-    wrap.appendChild(script);
-  };
-  window.addEventListener('load',function(){
-    var box=document.getElementById('chartBox');
-    if(box && !box.dataset.tvReady){
-      box.dataset.tvReady='1';
-      window.loadChart('NIFTY');
-    }
-  });
-})();
-</script>'''
-        response.set_data(html.replace("</body>", fix + "</body>"))
-    except Exception as error:
-        print("TRADINGVIEW INJECTION ERROR:", error)
-    return response
-
-
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if is_authenticated():
@@ -250,7 +181,8 @@ def historical_endpoint(symbol):
         stock = instrument_manager.find_stock(symbol.upper().strip())
         if not stock:
             return jsonify({"success": False, "message": "NSE equity symbol not found in Angel One instrument master."}), 404
-        return jsonify(angel_service.get_historical_data(symbol=stock["symbol"], token=stock["token"], days=200, interval="ONE_DAY", exchange="NSE"))
+        result = angel_service.get_historical_data(symbol=stock["symbol"], token=stock["token"], days=200, interval="ONE_DAY", exchange="NSE")
+        return jsonify(result)
     except Exception as error:
         return jsonify({"success": False, "message": str(error), "data": []}), 500
 
