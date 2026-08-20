@@ -148,6 +148,31 @@ class AngelScanner:
                 time.sleep(self.delay)
         results.sort(key=lambda item: (item.get("x10_score", 0), item.get("risk_reward_value", 0)), reverse=True)
         top_results = results[:5]
+
+        # Lightweight manual-analysis universe. These stocks are quote-only: no historical
+        # candles, TechnicalAnalyzer, or X10 calculations are performed for them here.
+        selected_symbols = {str(item.get("symbol", "")).upper() for item in selected}
+        manual_stocks = []
+        for _, q in candidates:
+            symbol = str(q.get("symbol", "")).upper()
+            if not symbol or symbol in selected_symbols:
+                continue
+            manual_stocks.append({
+                "symbol": symbol,
+                "token": str(q.get("token", q.get("symbolToken", ""))),
+                "name": q.get("name") or symbol,
+                "price": float(q.get("ltp", 0) or 0),
+                "x10_score": -1,
+                "signal": "MANUAL",
+                "momentum": "Not evaluated",
+                "trend": "Not evaluated",
+                "setup_quality": "NOT EVALUATED",
+                "risk_reward": "—",
+                "manual_only": True,
+            })
+            if len(manual_stocks) >= 100:
+                break
+
         indices = self._get_index_snapshots()
         elapsed = round(time.time() - start, 2)
         results = None
@@ -157,6 +182,13 @@ class AngelScanner:
         universe = None
         gc.collect()
         return {
-            "success": True, "count": len(top_results), "scanned": len(selected), "successful": len(top_results),
-            "time_seconds": elapsed, "stocks": top_results, "indices": indices
+            "success": True,
+            "count": len(top_results),
+            "scanned": len(selected),
+            "successful": len(top_results),
+            "manual_count": len(manual_stocks),
+            "time_seconds": elapsed,
+            "stocks": top_results + manual_stocks,
+            "top_opportunities": top_results,
+            "indices": indices,
         }
