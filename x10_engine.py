@@ -72,6 +72,7 @@ class X10Engine:
                     "stop_loss": 0, "target": 0, "target_1": 0,
                     "target_2": 0, "risk": 0, "reward": 0,
                     "risk_reward": 0, "risk_reward_value": 0,
+                    "risk_reward_display": "1:0",
                     "trailing_stop": 0, "chase_price": 0, "dont_chase": True,
                     "setup_quality": "INVALID"}
 
@@ -118,7 +119,8 @@ class X10Engine:
             "target_2": self._round(target_2),
             "risk": self._round(risk),
             "reward": self._round(reward),
-            "risk_reward": risk_reward,
+            "risk_reward": self._round(risk_reward_value),
+            "risk_reward_display": risk_reward,
             "risk_reward_value": self._round(risk_reward_value),
             "trailing_stop": self._round(max(entry, target_1 * 0.97)),
             "chase_price": self._round(chase_price),
@@ -145,6 +147,7 @@ class X10Engine:
             "risk": plan["risk"],
             "reward": plan["reward"],
             "risk_reward": plan["risk_reward"],
+            "risk_reward_display": plan["risk_reward_display"],
             "risk_reward_value": plan["risk_reward_value"],
             "trailing_stop": plan["trailing_stop"],
             "chase_price": plan["chase_price"],
