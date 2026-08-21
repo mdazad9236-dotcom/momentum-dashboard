@@ -104,25 +104,16 @@ class AngelScanner:
                 recent = [c for c in candles[-20:] if isinstance(c, (list, tuple)) and len(c) >= 5]
                 lows = [float(c[3]) for c in recent]
                 highs = [float(c[2]) for c in recent]
-
-                # Angel One can return historical candles successfully while its
-                # FULL quote endpoint returns no LTP for index instruments. In
-                # that case the old code left price at 0, so every index card
-                # appeared blank even though historical data was available.
-                # Use the latest candle close as a reliable fallback and mark
-                # the snapshot as the latest available broker candle.
                 if price <= 0 and recent:
                     price = float(recent[-1][4])
                     if len(recent) >= 2:
                         close = float(recent[-2][4])
                     change = price - close if close else 0
                     change_pct = change / close * 100 if close else 0
-
                 support = min(lows) if lows else support
                 resistance = max(highs) if highs else resistance
             except Exception as error:
                 print(f"[INDEX-HISTORY] {item['name']} ERROR: {error}")
-
             if price > 0 and support <= 0:
                 support = price * 0.99
             if price > 0 and resistance <= price:
@@ -132,10 +123,9 @@ class AngelScanner:
 
     def scan_market(self, limit=30, include_indices=True):
         start = time.time()
-        # Keep the first-pass shortlist intentionally small. The goal is to return
-        # actionable X10 candidates quickly instead of waiting for a full universe scan.
         requested_limit = max(1, int(limit))
-        scan_limit = min(requested_limit, 12)
+        # Keep the live first pass small enough for Render/Angel One rate limits.
+        scan_limit = min(requested_limit, 6)
 
         login = self.service.login()
         if not login.get("success"):
@@ -145,7 +135,8 @@ class AngelScanner:
             return {"success": False, "message": cache.get("message", "Unable to load instruments."), "stocks": [], "indices": []}
 
         universe = self.instrument_manager.get_nse_equities()
-        quote_universe = universe[:500]
+        # One bounded quote request is enough to identify liquid low-priced candidates.
+        quote_universe = universe[:200]
         quote_result = self.service.get_quotes(quote_universe)
         candidates = []
         if quote_result.get("success"):
@@ -170,11 +161,15 @@ class AngelScanner:
         results.sort(key=lambda item: (item.get("x10_score", 0), item.get("risk_reward_value", 0)), reverse=True)
         top_results = results[:5]
 
-        selected_symbols = {str(item.get("symbol", "")).upper() for item in selected}
+        # Only hide symbols that actually produced a technical/X10 result.
+        # Previously every selected symbol was hidden from the fallback list,
+        # so a temporary historical-data failure could make the entire dashboard
+        # show zero stocks even though quote data was available.
+        analyzed_symbols = {str(item.get("symbol", "")).upper() for item in results}
         manual_stocks = []
         for _, q in candidates:
             symbol = str(q.get("symbol", "")).upper()
-            if not symbol or symbol in selected_symbols:
+            if not symbol or symbol in analyzed_symbols:
                 continue
             manual_stocks.append({
                 "symbol": symbol,
@@ -183,13 +178,13 @@ class AngelScanner:
                 "price": float(q.get("ltp", 0) or 0),
                 "x10_score": -1,
                 "signal": "MANUAL",
-                "momentum": "Not evaluated",
-                "trend": "Not evaluated",
-                "setup_quality": "NOT EVALUATED",
+                "momentum": "Awaiting technical validation",
+                "trend": "Awaiting technical validation",
+                "setup_quality": "QUOTE VALIDATED",
                 "risk_reward": "—",
                 "manual_only": True,
             })
-            if len(manual_stocks) >= 100:
+            if len(manual_stocks) >= 50:
                 break
 
         indices = self._get_index_snapshots() if include_indices else []
