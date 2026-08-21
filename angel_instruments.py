@@ -7,7 +7,7 @@ from datetime import datetime
 INSTRUMENT_URL = "https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json"
 CACHE_FILE = "angel_instruments.json"
 TEMP_CACHE_FILE = "angel_instruments.json.tmp"
-DOWNLOAD_ATTEMPTS = 4
+DOWNLOAD_ATTEMPTS = 5
 CHUNK_SIZE = 1024 * 1024
 
 
@@ -24,21 +24,44 @@ class AngelInstrumentManager:
         os.replace(TEMP_CACHE_FILE, CACHE_FILE)
 
     def _download_once(self):
+        """Download the large Angel master to disk and resume interrupted reads."""
+        existing_size = os.path.getsize(TEMP_CACHE_FILE) if os.path.exists(TEMP_CACHE_FILE) else 0
+        headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+        if existing_size:
+            headers["Range"] = f"bytes={existing_size}-"
+
         response = requests.get(
             INSTRUMENT_URL,
             stream=True,
-            timeout=(15, 180),
-            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=(20, 180),
+            headers=headers,
         )
         response.raise_for_status()
-        chunks = []
+
+        # A server that ignores Range returns 200. Restart the temporary file
+        # rather than appending the complete response to a partial download.
+        append = existing_size > 0 and response.status_code == 206
+        if not append:
+            existing_size = 0
+            mode = "wb"
+        else:
+            mode = "ab"
+
         try:
-            for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
-                if chunk:
-                    chunks.append(chunk)
+            with open(TEMP_CACHE_FILE, mode) as file:
+                for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
+                    if chunk:
+                        file.write(chunk)
+                file.flush()
+                os.fsync(file.fileno())
         finally:
             response.close()
-        payload = b"".join(chunks)
+
+        # Parse only after the entire response has been written. A truncated
+        # JSON document raises JSONDecodeError and leaves the partial file in
+        # place so the next attempt can resume it when Range is supported.
+        with open(TEMP_CACHE_FILE, "rb") as file:
+            payload = file.read()
         if not payload:
             raise ValueError("Angel One instrument master download was empty.")
         data = json.loads(payload.decode("utf-8"))
@@ -57,16 +80,17 @@ class AngelInstrumentManager:
                 message = "Instrument master downloaded."
                 if attempt > 1:
                     message = f"Instrument master downloaded on retry {attempt}."
+                print(f"{message} Records: {len(data)}")
                 return {"success": True, "count": len(data), "message": message}
             except (requests.exceptions.RequestException, json.JSONDecodeError, UnicodeDecodeError, ValueError, OSError) as error:
                 last_error = error
-                print(f"Angel instrument master download attempt {attempt}/{DOWNLOAD_ATTEMPTS} failed: {error}")
-                try:
-                    os.remove(TEMP_CACHE_FILE)
-                except OSError:
-                    pass
+                partial_size = os.path.getsize(TEMP_CACHE_FILE) if os.path.exists(TEMP_CACHE_FILE) else 0
+                print(
+                    f"Angel instrument master download attempt {attempt}/{DOWNLOAD_ATTEMPTS} "
+                    f"failed after {partial_size} bytes: {error}"
+                )
                 if attempt < DOWNLOAD_ATTEMPTS:
-                    time.sleep(min(2 ** (attempt - 1), 8))
+                    time.sleep(min(2 ** (attempt - 1), 10))
         return {
             "success": False,
             "count": 0,
@@ -95,10 +119,11 @@ class AngelInstrumentManager:
     def refresh(self):
         self.instruments = []
         self._stock_cache = None
-        try:
-            os.remove(CACHE_FILE)
-        except OSError:
-            pass
+        for path in (CACHE_FILE, TEMP_CACHE_FILE):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
         return self.download_master()
 
     def get_nse_equities(self):
