@@ -1,5 +1,78 @@
 class X10Engine:
-    """X10 scoring and actionable trade-plan engine."""
+    """X10 scoring and actionable trade-plan engine.
+
+    X10 remains the primary decision-support layer.  The score deliberately
+    rewards developing momentum setups and avoids treating an already-extended
+    move as automatically better.
+    """
+
+    def _early_momentum(self, analysis):
+        """Return an early-momentum score and lifecycle label.
+
+        This is intentionally conservative: the engine prefers positive trend
+        and improving participation while penalising price that is already too
+        close to resistance/52-week highs.
+        """
+        price = float(analysis.get("price", 0) or 0)
+        resistance = float(analysis.get("resistance", 0) or 0)
+        high_52 = float(analysis.get("52_week_high", 0) or 0)
+        rsi = float(analysis.get("rsi", 50) or 50)
+        volume_ratio = float(analysis.get("volume_ratio", 0) or 0)
+        adx = float(analysis.get("adx", 0) or 0)
+        momentum = analysis.get("momentum", "Neutral")
+        trend = analysis.get("trend", "Neutral")
+
+        score = 0
+
+        if trend in ("Bullish", "Strong Bullish"):
+            score += 20
+        if momentum == "Positive":
+            score += 20
+
+        # Healthy acceleration is preferred over an exhausted RSI spike.
+        if 52 <= rsi <= 68:
+            score += 15
+        elif 68 < rsi <= 72:
+            score += 7
+        elif rsi > 75:
+            score -= 15
+
+        if 1.15 <= volume_ratio <= 2.5:
+            score += 15
+        elif volume_ratio > 3.5:
+            # Large volume is not automatically bullish; it can represent
+            # exhaustion or distribution.
+            score += 3
+
+        if adx >= 20:
+            score += 10
+
+        if price > 0 and resistance > price:
+            distance = (resistance - price) / price * 100
+            if 1.5 <= distance <= 10:
+                score += 10
+            elif distance < 1.5:
+                score -= 8
+        elif price > 0 and resistance > 0 and price >= resistance:
+            score -= 10
+
+        if price > 0 and high_52 > 0:
+            high_distance = (high_52 - price) / price * 100
+            if 5 <= high_distance <= 25:
+                score += 10
+            elif high_distance < 3:
+                score -= 8
+
+        score = max(0, min(int(score), 100))
+        if score >= 72:
+            stage = "EARLY ACCELERATION"
+        elif score >= 55:
+            stage = "DEVELOPING MOMENTUM"
+        elif score >= 40:
+            stage = "WATCH"
+        else:
+            stage = "LATE / WEAK"
+        return score, stage
 
     def calculate_score(self, analysis):
         score = 0
@@ -34,6 +107,11 @@ class X10Engine:
         volume_ratio = float(analysis.get("volume_ratio", 0) or 0)
         if volume_ratio >= 1.5: score += 10
         elif volume_ratio >= 1.2: score += 5
+
+        early_score, _ = self._early_momentum(analysis)
+        # Early momentum is a tie-break/decision-support component, not a
+        # replacement for the core technical score.
+        score += round((early_score - 50) * 0.20)
         return max(0, min(int(score), 100))
 
     def get_signal(self, score):
@@ -132,11 +210,16 @@ class X10Engine:
         score = self.calculate_score(analysis)
         signal = self.get_signal(score)
         plan = self.calculate_trade_plan(analysis)
+        early_score, momentum_stage = self._early_momentum(analysis)
+        confidence = "HIGH" if score >= 80 and early_score >= 60 else "MEDIUM" if score >= 65 else "LOW"
         if plan["dont_chase"] and signal in ("STRONG BUY", "BUY"):
             signal = "WAIT / DON'T CHASE"
         return {
             "x10_score": score,
             "signal": signal,
+            "confidence": confidence,
+            "early_momentum_score": early_score,
+            "momentum_stage": momentum_stage,
             "entry": plan["entry"],
             "entry_low": plan["entry_low"],
             "entry_high": plan["entry_high"],
