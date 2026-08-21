@@ -101,12 +101,28 @@ class AngelScanner:
             try:
                 history = self.service.get_historical_data(item["name"], item["token"], days=45, interval="ONE_DAY", exchange=item["exchange"])
                 candles = history.get("data", []) if history.get("success") else []
-                lows = [float(c[3]) for c in candles[-20:] if len(c) >= 5]
-                highs = [float(c[2]) for c in candles[-20:] if len(c) >= 5]
+                recent = [c for c in candles[-20:] if isinstance(c, (list, tuple)) and len(c) >= 5]
+                lows = [float(c[3]) for c in recent]
+                highs = [float(c[2]) for c in recent]
+
+                # Angel One can return historical candles successfully while its
+                # FULL quote endpoint returns no LTP for index instruments. In
+                # that case the old code left price at 0, so every index card
+                # appeared blank even though historical data was available.
+                # Use the latest candle close as a reliable fallback and mark
+                # the snapshot as the latest available broker candle.
+                if price <= 0 and recent:
+                    price = float(recent[-1][4])
+                    if len(recent) >= 2:
+                        close = float(recent[-2][4])
+                    change = price - close if close else 0
+                    change_pct = change / close * 100 if close else 0
+
                 support = min(lows) if lows else support
                 resistance = max(highs) if highs else resistance
             except Exception as error:
                 print(f"[INDEX-HISTORY] {item['name']} ERROR: {error}")
+
             if price > 0 and support <= 0:
                 support = price * 0.99
             if price > 0 and resistance <= price:
