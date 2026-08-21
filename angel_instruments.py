@@ -1,11 +1,14 @@
 import json
 import os
+import time
 import requests
 from datetime import datetime
 
 INSTRUMENT_URL = "https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json"
 CACHE_FILE = "angel_instruments.json"
 TEMP_CACHE_FILE = "angel_instruments.json.tmp"
+DOWNLOAD_ATTEMPTS = 4
+CHUNK_SIZE = 1024 * 1024
 
 
 class AngelInstrumentManager:
@@ -20,23 +23,55 @@ class AngelInstrumentManager:
             os.fsync(file.fileno())
         os.replace(TEMP_CACHE_FILE, CACHE_FILE)
 
-    def download_master(self):
+    def _download_once(self):
+        response = requests.get(
+            INSTRUMENT_URL,
+            stream=True,
+            timeout=(15, 180),
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        response.raise_for_status()
+        chunks = []
         try:
-            response = requests.get(INSTRUMENT_URL, timeout=(10, 90))
-            response.raise_for_status()
-            data = response.json()
-            if not isinstance(data, list) or not data:
-                raise ValueError("Invalid or empty Angel One instrument data.")
-            self._save_cache_atomically(data)
-            self.instruments = data
-            self._stock_cache = None
-            return {"success": True, "count": len(data), "message": "Instrument master downloaded."}
-        except requests.exceptions.Timeout:
-            return {"success": False, "count": 0, "message": "Angel One instrument master download timed out."}
-        except requests.exceptions.RequestException as error:
-            return {"success": False, "count": 0, "message": f"Unable to download Angel One instrument master: {error}"}
-        except Exception as error:
-            return {"success": False, "count": 0, "message": str(error)}
+            for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
+                if chunk:
+                    chunks.append(chunk)
+        finally:
+            response.close()
+        payload = b"".join(chunks)
+        if not payload:
+            raise ValueError("Angel One instrument master download was empty.")
+        data = json.loads(payload.decode("utf-8"))
+        if not isinstance(data, list) or not data:
+            raise ValueError("Invalid or empty Angel One instrument data.")
+        return data
+
+    def download_master(self):
+        last_error = None
+        for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+            try:
+                data = self._download_once()
+                self._save_cache_atomically(data)
+                self.instruments = data
+                self._stock_cache = None
+                message = "Instrument master downloaded."
+                if attempt > 1:
+                    message = f"Instrument master downloaded on retry {attempt}."
+                return {"success": True, "count": len(data), "message": message}
+            except (requests.exceptions.RequestException, json.JSONDecodeError, UnicodeDecodeError, ValueError, OSError) as error:
+                last_error = error
+                print(f"Angel instrument master download attempt {attempt}/{DOWNLOAD_ATTEMPTS} failed: {error}")
+                try:
+                    os.remove(TEMP_CACHE_FILE)
+                except OSError:
+                    pass
+                if attempt < DOWNLOAD_ATTEMPTS:
+                    time.sleep(min(2 ** (attempt - 1), 8))
+        return {
+            "success": False,
+            "count": 0,
+            "message": f"Unable to download Angel One instrument master after {DOWNLOAD_ATTEMPTS} attempts: {last_error}",
+        }
 
     def load_cache(self):
         if self.instruments:
@@ -106,8 +141,6 @@ class AngelInstrumentManager:
         if requested.endswith("-EQ"):
             candidates.append(requested[:-3])
         elif requested.endswith("EQ"):
-            # The frontend chart normalizer may remove the hyphen from Angel One
-            # symbols such as SBIN-EQ. Restore that canonical form for lookup.
             candidates.append(requested[:-2] + "-EQ")
             candidates.append(requested[:-2])
         for item in self.instruments:
