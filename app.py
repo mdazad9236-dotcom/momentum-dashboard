@@ -52,15 +52,45 @@ def _run_market_scan():
     started = time.time()
     try:
         scanner = AngelScanner(batch_size=5, delay=0.03, max_workers=5)
-        result = scanner.scan_market(limit=30)
+
+        # Phase 1: calculate and publish the X10 shortlist without waiting for
+        # slower index historical analysis. The existing X10 scoring is unchanged.
+        result = scanner.scan_market(limit=30, include_indices=False)
         if not result.get("success"):
             raise RuntimeError(result.get("message", "Angel One scanner failed."))
+
         stocks = [clean_stock(stock) for stock in result.get("stocks", []) if isinstance(stock, dict)]
-        payload = {"success": True, "message": "Market scan completed.", "count": len(stocks), "scanned": result.get("scanned", 0), "successful": result.get("successful", 0), "time_seconds": result.get("time_seconds", round(time.time() - started, 2)), "stocks": stocks, "indices": result.get("indices", []), "updated_at": time.time()}
+        payload = {
+            "success": True,
+            "message": "X10 shortlist ready. Index analysis is updating in the background.",
+            "count": len(stocks),
+            "scanned": result.get("scanned", 0),
+            "successful": result.get("successful", 0),
+            "time_seconds": result.get("time_seconds", round(time.time() - started, 2)),
+            "stocks": stocks,
+            "indices": [],
+            "updated_at": time.time(),
+        }
         with _scan_lock:
             _scan_state["result"] = payload
             _scan_state["updated_at"] = payload["updated_at"]
             _scan_state["last_error"] = None
+
+        # Phase 2: keep the index work off the critical path. The shortlist is
+        # already visible to the frontend while these requests are running.
+        try:
+            indices = scanner._get_index_snapshots()
+            with _scan_lock:
+                if _scan_state["result"] is not None:
+                    _scan_state["result"] = dict(_scan_state["result"])
+                    _scan_state["result"]["indices"] = indices
+                    _scan_state["result"]["message"] = "Market scan completed."
+        except Exception as error:
+            print("BACKGROUND INDEX ANALYSIS ERROR:", error)
+            with _scan_lock:
+                if _scan_state["result"] is not None:
+                    _scan_state["result"] = dict(_scan_state["result"])
+                    _scan_state["result"]["message"] = "X10 shortlist ready. Index analysis is temporarily unavailable."
         return True
     except Exception as error:
         print("BACKGROUND X10 SCANNER ERROR:", error)
