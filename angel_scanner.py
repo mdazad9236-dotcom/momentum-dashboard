@@ -114,7 +114,7 @@ class AngelScanner:
             snapshots.append(build_index_snapshot(item["name"], price, support, resistance, change, change_pct))
         return snapshots
 
-    def scan_market(self, limit=30):
+    def scan_market(self, limit=30, include_indices=True):
         start = time.time()
         # Keep the first-pass shortlist intentionally small. The goal is to return
         # actionable X10 candidates quickly instead of waiting for a full universe scan.
@@ -154,8 +154,6 @@ class AngelScanner:
         results.sort(key=lambda item: (item.get("x10_score", 0), item.get("risk_reward_value", 0)), reverse=True)
         top_results = results[:5]
 
-        # Lightweight manual-analysis universe. These stocks are quote-only: no historical
-        # candles, TechnicalAnalyzer, or X10 calculations are performed for them here.
         selected_symbols = {str(item.get("symbol", "")).upper() for item in selected}
         manual_stocks = []
         for _, q in candidates:
@@ -178,7 +176,7 @@ class AngelScanner:
             if len(manual_stocks) >= 100:
                 break
 
-        indices = self._get_index_snapshots()
+        indices = self._get_index_snapshots() if include_indices else []
         elapsed = round(time.time() - start, 2)
         results = None
         candidates = None
