@@ -3,6 +3,7 @@ import threading
 import time
 import requests
 from functools import wraps
+from concurrent.futures import ThreadPoolExecutor
 
 from flask import Flask, jsonify, render_template, request, redirect, url_for, session
 
@@ -85,6 +86,29 @@ def _ensure_index_refresh(force=False):
     if (force or stale) and not refreshing:
         threading.Thread(target=_run_index_refresh, name="x10-index-refresh", daemon=True).start()
 
+def _publish_scan_payload(result, started):
+    stocks = [clean_stock(stock) for stock in result.get("stocks", []) if isinstance(stock, dict)]
+    with _index_lock:
+        indices = list(_index_state["indices"])
+    payload = {
+        "success": True,
+        "message": result.get("message", "Market scan completed."),
+        "count": len(stocks),
+        "scanned": result.get("scanned", len(stocks)),
+        "successful": result.get("successful", len(stocks)),
+        "manual_count": result.get("manual_count", 0),
+        "time_seconds": result.get("time_seconds", round(time.time() - started, 2)),
+        "stocks": stocks,
+        "indices": indices,
+        "updated_at": time.time(),
+        "data_source": result.get("data_source", "MIXED"),
+    }
+    with _scan_lock:
+        _scan_state["result"] = payload
+        _scan_state["updated_at"] = payload["updated_at"]
+        _scan_state["last_error"] = None
+    return payload
+
 def _run_market_scan():
     with _scan_lock:
         if _scan_state["refreshing"]:
@@ -94,31 +118,55 @@ def _run_market_scan():
     try:
         scanner = AngelScanner(batch_size=3, delay=0.03, max_workers=3)
 
-        # Index refresh runs independently. Do NOT wait for index history here:
-        # waiting for four index candle requests before starting the stock scan
-        # made the stock cards appear empty while the scanner was still working.
-        result = scanner.scan_market(limit=12, include_indices=False)
-        if not result.get("success"):
-            raise RuntimeError(result.get("message", "Angel One scanner failed."))
+        # IMPORTANT: never leave the UI empty while broker login/instrument/quote
+        # operations are slow or rate-limited. Run the independent Yahoo/X10
+        # fallback at the same time and publish it as soon as it is ready.
+        fallback_executor = ThreadPoolExecutor(max_workers=1)
+        fallback_future = fallback_executor.submit(scanner._fallback_yfinance_scan, 6)
+        broker_future = fallback_executor.submit(lambda: scanner.scan_market(limit=12, include_indices=False))
 
-        stocks = [clean_stock(stock) for stock in result.get("stocks", []) if isinstance(stock, dict)]
-        with _index_lock:
-            indices = list(_index_state["indices"])
-        payload = {
-            "success": True,
-            "message": "Market scan completed.",
-            "count": len(stocks),
-            "scanned": result.get("scanned", 0),
-            "successful": result.get("successful", 0),
-            "time_seconds": result.get("time_seconds", round(time.time() - started, 2)),
-            "stocks": stocks,
-            "indices": indices,
-            "updated_at": time.time(),
-        }
-        with _scan_lock:
-            _scan_state["result"] = payload
-            _scan_state["updated_at"] = payload["updated_at"]
-            _scan_state["last_error"] = None
+        fallback_published = False
+        try:
+            fallback_results = fallback_future.result(timeout=20)
+            if fallback_results:
+                _publish_scan_payload({
+                    "success": True,
+                    "message": "Live stock scan is running; showing X10 market-data candidates while broker data refreshes.",
+                    "stocks": fallback_results,
+                    "scanned": len(fallback_results),
+                    "successful": len(fallback_results),
+                    "data_source": "YAHOO FALLBACK",
+                }, started)
+                fallback_published = True
+        except Exception as error:
+            print("BACKGROUND FALLBACK SCAN ERROR:", error)
+
+        try:
+            result = broker_future.result(timeout=45)
+            if result and result.get("success") and result.get("stocks"):
+                _publish_scan_payload(result, started)
+            elif not fallback_published:
+                raise RuntimeError((result or {}).get("message", "Broker scanner returned no stocks."))
+        except Exception as error:
+            print("BACKGROUND X10 SCANNER ERROR:", error)
+            with _scan_lock:
+                _scan_state["last_error"] = str(error)
+            if not fallback_published:
+                try:
+                    late_fallback = fallback_future.result(timeout=20)
+                    if late_fallback:
+                        _publish_scan_payload({
+                            "success": True,
+                            "message": "Broker scan unavailable; showing X10 market-data candidates.",
+                            "stocks": late_fallback,
+                            "scanned": len(late_fallback),
+                            "successful": len(late_fallback),
+                            "data_source": "YAHOO FALLBACK",
+                        }, started)
+                except Exception as fallback_error:
+                    print("BACKGROUND LATE FALLBACK ERROR:", fallback_error)
+        finally:
+            fallback_executor.shutdown(wait=False, cancel_futures=False)
         return True
     except Exception as error:
         print("BACKGROUND X10 SCANNER ERROR:", error)
