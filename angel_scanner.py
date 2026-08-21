@@ -116,6 +116,11 @@ class AngelScanner:
 
     def scan_market(self, limit=30):
         start = time.time()
+        # Keep the first-pass shortlist intentionally small. The goal is to return
+        # actionable X10 candidates quickly instead of waiting for a full universe scan.
+        requested_limit = max(1, int(limit))
+        scan_limit = min(requested_limit, 12)
+
         login = self.service.login()
         if not login.get("success"):
             return {"success": False, "message": login.get("message", "Angel One login failed."), "stocks": [], "indices": []}
@@ -137,9 +142,9 @@ class AngelScanner:
                 q["symbol"] = q.get("symbol") or q.get("tradingsymbol", "")
                 candidates.append((volume, q))
         if not candidates:
-            candidates = [(0, stock) for stock in universe[:limit]]
+            candidates = [(0, stock) for stock in universe[:scan_limit]]
         candidates.sort(key=lambda pair: pair[0], reverse=True)
-        selected = [item for _, item in candidates[:max(20, min(int(limit), 30))]]
+        selected = [item for _, item in candidates[:scan_limit]]
 
         results = []
         for offset in range(0, len(selected), self.batch_size):
