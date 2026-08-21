@@ -10,10 +10,6 @@ from angel_instruments import AngelInstrumentManager
 from analysis import TechnicalAnalyzer
 from market_indices import INDEX_DEFINITIONS, build_index_snapshot
 
-
-# Small emergency universe used only when the Angel One instrument/quote pipeline
-# is unavailable. It prevents the dashboard from becoming completely empty while
-# broker connectivity recovers. Technical/X10 validation is still applied.
 FALLBACK_STOCKS = [
     "IDEA", "SUZLON", "YESBANK", "NHPC", "IREDA", "IRFC", "RVNL", "SJVN",
     "IDFCFIRSTB", "IOC", "PNB", "CANBK", "BANKBARODA", "UCOBANK", "TRIDENT",
@@ -106,22 +102,59 @@ class AngelScanner:
         gc.collect()
         return results
 
+    @staticmethod
+    def _yahoo_candidate(symbol):
+        """Fetch and X10-analyze one fallback ticker independently."""
+        try:
+            history = yf.Ticker(f"{symbol}.NS").history(period="6mo", interval="1d", auto_adjust=False)
+            if history is None or history.empty:
+                return None
+            analysis = TechnicalAnalyzer(history).calculate()
+            if not analysis:
+                return None
+            x10 = X10Engine().analyze({**analysis, "price": analysis.get("price", 0)})
+            if not x10:
+                return None
+            return {
+                "symbol": symbol,
+                "token": "",
+                "name": symbol,
+                "price": analysis.get("price", 0),
+                "technical_score": analysis.get("technical_score", 0),
+                "x10_score": x10.get("x10_score", 0),
+                "success_probability": x10.get("x10_score", 0),
+                "signal": x10.get("signal", "AVOID"),
+                "entry": x10.get("entry", 0), "entry_low": x10.get("entry_low", 0), "entry_high": x10.get("entry_high", 0),
+                "stop_loss": x10.get("stop_loss", 0), "target": x10.get("target", 0),
+                "target_1": x10.get("target_1", 0), "target_2": x10.get("target_2", 0),
+                "risk": x10.get("risk", 0), "reward": x10.get("reward", 0),
+                "risk_reward": x10.get("risk_reward", "1:0"), "risk_reward_value": x10.get("risk_reward_value", 0),
+                "trailing_stop": x10.get("trailing_stop", 0), "chase_price": x10.get("chase_price", 0),
+                "dont_chase": x10.get("dont_chase", False), "setup_quality": x10.get("setup_quality", "WEAK"),
+                "trend": analysis.get("trend", "Neutral"), "momentum": analysis.get("momentum", "Neutral"),
+                "rsi": analysis.get("rsi", 0), "ema20": analysis.get("ema20", 0), "ema50": analysis.get("ema50", 0),
+                "ema200": analysis.get("ema200", 0), "macd": analysis.get("macd", 0), "macd_signal": analysis.get("macd_signal", 0),
+                "macd_histogram": analysis.get("macd_histogram", 0), "adx": analysis.get("adx", 0),
+                "plus_di": analysis.get("plus_di", 0), "minus_di": analysis.get("minus_di", 0),
+                "support": analysis.get("support", 0), "resistance": analysis.get("resistance", 0),
+                "volume_ratio": analysis.get("volume_ratio", 0), "atr": analysis.get("atr", 0),
+                "52_week_high": analysis.get("52_week_high", 0), "52_week_low": analysis.get("52_week_low", 0),
+                "scan_time": 0, "data_source": "YAHOO FALLBACK",
+            }
+        except Exception as error:
+            print(f"[FALLBACK] {symbol} ERROR: {error}")
+            return None
+
     def _fallback_yfinance_scan(self, limit=6):
-        """Return validated X10 candidates when the Angel instrument master is unavailable."""
+        """Run fallback tickers concurrently so a broker outage cannot leave the UI empty for minutes."""
+        symbols = FALLBACK_STOCKS[:max(1, int(limit))]
         results = []
-        for symbol in FALLBACK_STOCKS:
-            try:
-                history = yf.Ticker(f"{symbol}.NS").history(period="6mo", interval="1d", auto_adjust=False)
-                if history is None or history.empty:
-                    continue
-                analysis = TechnicalAnalyzer(history).calculate()
-                if not analysis:
-                    continue
-                x10 = self.x10_engine.analyze({**analysis, "price": analysis.get("price", 0)})
-                if x10:
-                    results.append(self._format_result(symbol, "", symbol, analysis, x10, time.time(), "YAHOO FALLBACK"))
-            except Exception as error:
-                print(f"[FALLBACK] {symbol} ERROR: {error}")
+        with ThreadPoolExecutor(max_workers=min(4, len(symbols))) as executor:
+            futures = [executor.submit(self._yahoo_candidate, symbol) for symbol in symbols]
+            for future in as_completed(futures):
+                result = future.result()
+                if result:
+                    results.append(result)
         results.sort(key=lambda x: (x.get("x10_score", 0), x.get("risk_reward_value", 0)), reverse=True)
         return results[:max(1, int(limit))]
 
@@ -162,8 +195,6 @@ class AngelScanner:
                 resistance = max(price * 1.01, high)
             snapshots.append(build_index_snapshot(item["name"], price, support, resistance, change, change_pct))
 
-        # If broker index calls produced no usable prices, keep the dashboard useful
-        # with a current Yahoo Finance snapshot rather than showing an empty card.
         if not any(float(item.get("price", 0) or 0) > 0 for item in snapshots):
             fallback = []
             for name, ticker in FALLBACK_INDICES.items():
@@ -198,35 +229,13 @@ class AngelScanner:
         if not login.get("success"):
             print("[X10] Angel login unavailable; using market-data fallback.")
             fallback_results = self._fallback_yfinance_scan(scan_limit)
-            return {
-                "success": True,
-                "message": "Angel One unavailable; showing fallback market-data candidates.",
-                "stocks": fallback_results,
-                "top_opportunities": fallback_results[:5],
-                "count": min(5, len(fallback_results)),
-                "scanned": len(fallback_results),
-                "successful": len(fallback_results),
-                "manual_count": 0,
-                "time_seconds": round(time.time() - start, 2),
-                "indices": self._get_index_snapshots() if include_indices else [],
-            }
+            return {"success": True, "message": "Angel One unavailable; showing fallback market-data candidates.", "stocks": fallback_results, "top_opportunities": fallback_results[:5], "count": len(fallback_results), "scanned": len(fallback_results), "successful": len(fallback_results), "manual_count": 0, "time_seconds": round(time.time() - start, 2), "indices": self._get_index_snapshots() if include_indices else []}
 
         cache = self.instrument_manager.load_cache()
         if not cache.get("success"):
             print("[X10] Instrument master unavailable; using market-data fallback:", cache.get("message"))
             fallback_results = self._fallback_yfinance_scan(scan_limit)
-            return {
-                "success": True,
-                "message": "Instrument master unavailable; showing fallback market-data candidates.",
-                "stocks": fallback_results,
-                "top_opportunities": fallback_results[:5],
-                "count": min(5, len(fallback_results)),
-                "scanned": len(fallback_results),
-                "successful": len(fallback_results),
-                "manual_count": 0,
-                "time_seconds": round(time.time() - start, 2),
-                "indices": self._get_index_snapshots() if include_indices else [],
-            }
+            return {"success": True, "message": "Instrument master unavailable; showing fallback market-data candidates.", "stocks": fallback_results, "top_opportunities": fallback_results[:5], "count": len(fallback_results), "scanned": len(fallback_results), "successful": len(fallback_results), "manual_count": 0, "time_seconds": round(time.time() - start, 2), "indices": self._get_index_snapshots() if include_indices else []}
 
         universe = self.instrument_manager.get_nse_equities()
         quote_universe = universe[:200]
@@ -244,18 +253,7 @@ class AngelScanner:
         if not candidates:
             print("[X10] Angel quote scan returned no candidates; using fallback market-data scan.")
             fallback_results = self._fallback_yfinance_scan(scan_limit)
-            return {
-                "success": True,
-                "message": "Angel quote scan returned no candidates; showing fallback market-data candidates.",
-                "stocks": fallback_results,
-                "top_opportunities": fallback_results[:5],
-                "count": min(5, len(fallback_results)),
-                "scanned": len(fallback_results),
-                "successful": len(fallback_results),
-                "manual_count": 0,
-                "time_seconds": round(time.time() - start, 2),
-                "indices": self._get_index_snapshots() if include_indices else [],
-            }
+            return {"success": True, "message": "Angel quote scan returned no candidates; showing fallback market-data candidates.", "stocks": fallback_results, "top_opportunities": fallback_results[:5], "count": len(fallback_results), "scanned": len(fallback_results), "successful": len(fallback_results), "manual_count": 0, "time_seconds": round(time.time() - start, 2), "indices": self._get_index_snapshots() if include_indices else []}
 
         candidates.sort(key=lambda pair: pair[0], reverse=True)
         selected = [item for _, item in candidates[:scan_limit]]
@@ -273,34 +271,11 @@ class AngelScanner:
             symbol = str(q.get("symbol", "")).upper()
             if not symbol or symbol in analyzed_symbols:
                 continue
-            manual_stocks.append({
-                "symbol": symbol,
-                "token": str(q.get("token", q.get("symbolToken", ""))),
-                "name": q.get("name") or symbol,
-                "price": float(q.get("ltp", 0) or 0),
-                "x10_score": -1,
-                "signal": "MANUAL",
-                "momentum": "Awaiting technical validation",
-                "trend": "Awaiting technical validation",
-                "setup_quality": "QUOTE VALIDATED",
-                "risk_reward": "—",
-                "manual_only": True,
-                "data_source": "ANGEL ONE QUOTE",
-            })
+            manual_stocks.append({"symbol": symbol, "token": str(q.get("token", q.get("symbolToken", ""))), "name": q.get("name") or symbol, "price": float(q.get("ltp", 0) or 0), "x10_score": -1, "signal": "MANUAL", "momentum": "Awaiting technical validation", "trend": "Awaiting technical validation", "setup_quality": "QUOTE VALIDATED", "risk_reward": "—", "manual_only": True, "data_source": "ANGEL ONE QUOTE"})
             if len(manual_stocks) >= 50:
                 break
 
         indices = self._get_index_snapshots() if include_indices else []
         elapsed = round(time.time() - start, 2)
         gc.collect()
-        return {
-            "success": True,
-            "count": len(top_results),
-            "scanned": len(selected),
-            "successful": len(top_results),
-            "manual_count": len(manual_stocks),
-            "time_seconds": elapsed,
-            "stocks": top_results + manual_stocks,
-            "top_opportunities": top_results,
-            "indices": indices,
-        }
+        return {"success": True, "count": len(top_results), "scanned": len(selected), "successful": len(top_results), "manual_count": len(manual_stocks), "time_seconds": elapsed, "stocks": top_results + manual_stocks, "top_opportunities": top_results, "indices": indices}
