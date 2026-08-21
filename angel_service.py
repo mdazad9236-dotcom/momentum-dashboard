@@ -1,4 +1,6 @@
 import os
+import threading
+import time
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -7,6 +9,15 @@ from SmartApi import SmartConnect
 
 
 class AngelOneService:
+    # Share one authenticated SmartConnect session across all service instances
+    # in the Flask process. The app runs index refresh and X10 scan workers in
+    # separate threads; creating separate Angel sessions from those workers can
+    # trigger Angel One's login-rate limit.
+    _session_lock = threading.RLock()
+    _shared_api = None
+    _shared_logged_in = False
+    _shared_client_code = None
+
     def __init__(self):
         self.api_key = os.getenv("ANGEL_API_KEY")
         self.client_code = os.getenv("ANGEL_CLIENT_CODE")
@@ -16,25 +27,69 @@ class AngelOneService:
         self.logged_in = False
 
     def login(self):
-        if self.logged_in and self.smart_api:
-            return {"success": True, "message": "Angel One session already active."}
-        missing = [name for name, value in (("ANGEL_API_KEY", self.api_key), ("ANGEL_CLIENT_CODE", self.client_code), ("ANGEL_PASSWORD", self.password), ("ANGEL_TOTP_SECRET", self.totp_secret)) if not value]
-        if missing:
-            return {"success": False, "message": "Missing Angel One environment variables: " + ", ".join(missing)}
-        try:
-            self.smart_api = SmartConnect(api_key=self.api_key)
-            self.smart_api.timeout = 20
-            response = self.smart_api.generateSession(self.client_code, self.password, pyotp.TOTP(self.totp_secret).now())
-            if not response or not response.get("status"):
-                self.smart_api = None
-                self.logged_in = False
-                return {"success": False, "message": (response or {}).get("message", "Angel One login failed.")}
-            self.logged_in = True
-            return {"success": True, "message": "Angel One login successful."}
-        except Exception as error:
+        with AngelOneService._session_lock:
+            if (
+                AngelOneService._shared_logged_in
+                and AngelOneService._shared_api is not None
+                and AngelOneService._shared_client_code == self.client_code
+            ):
+                self.smart_api = AngelOneService._shared_api
+                self.logged_in = True
+                return {"success": True, "message": "Angel One shared session already active."}
+
+            missing = [
+                name for name, value in (
+                    ("ANGEL_API_KEY", self.api_key),
+                    ("ANGEL_CLIENT_CODE", self.client_code),
+                    ("ANGEL_PASSWORD", self.password),
+                    ("ANGEL_TOTP_SECRET", self.totp_secret),
+                ) if not value
+            ]
+            if missing:
+                return {"success": False, "message": "Missing Angel One environment variables: " + ", ".join(missing)}
+
+            # Do not repeatedly hammer the login endpoint after a rate-limit
+            # response. A short retry is useful for transient gateway errors,
+            # while the shared-session check above prevents concurrent logins.
+            last_error = None
+            for attempt in range(1, 3):
+                try:
+                    self.smart_api = SmartConnect(api_key=self.api_key)
+                    self.smart_api.timeout = 20
+                    response = self.smart_api.generateSession(
+                        self.client_code,
+                        self.password,
+                        pyotp.TOTP(self.totp_secret).now(),
+                    )
+                    if response and response.get("status"):
+                        AngelOneService._shared_api = self.smart_api
+                        AngelOneService._shared_logged_in = True
+                        AngelOneService._shared_client_code = self.client_code
+                        self.logged_in = True
+                        return {"success": True, "message": "Angel One login successful."}
+
+                    message = (response or {}).get("message", "Angel One login failed.")
+                    last_error = message
+                    if "access denied" in str(message).lower() or "rate" in str(message).lower():
+                        # Rate limits are normally short-lived. Wait once rather
+                        # than issuing a burst of login attempts from workers.
+                        if attempt < 2:
+                            time.sleep(3)
+                            continue
+                    break
+                except Exception as error:
+                    last_error = str(error)
+                    if "access denied" in last_error.lower() or "rate" in last_error.lower():
+                        if attempt < 2:
+                            time.sleep(3)
+                            continue
+                    break
+
             self.smart_api = None
             self.logged_in = False
-            return {"success": False, "message": f"Angel One login error: {error}"}
+            AngelOneService._shared_api = None
+            AngelOneService._shared_logged_in = False
+            return {"success": False, "message": f"Angel One login error: {last_error or 'login failed.'}"}
 
     def get_market_data_service(self):
         login_result = self.login()
