@@ -115,15 +115,15 @@ def _run_market_scan():
             return False
         _scan_state["refreshing"] = True
     started = time.time()
+    executor = ThreadPoolExecutor(max_workers=2)
     try:
         scanner = AngelScanner(batch_size=3, delay=0.03, max_workers=3)
 
-        # IMPORTANT: never leave the UI empty while broker login/instrument/quote
-        # operations are slow or rate-limited. Run the independent Yahoo/X10
-        # fallback at the same time and publish it as soon as it is ready.
-        fallback_executor = ThreadPoolExecutor(max_workers=1)
-        fallback_future = fallback_executor.submit(scanner._fallback_yfinance_scan, 6)
-        broker_future = fallback_executor.submit(lambda: scanner.scan_market(limit=12, include_indices=False))
+        # Run the independent Yahoo/X10 fallback and broker scan concurrently.
+        # This guarantees that a slow/rate-limited Angel One login cannot leave
+        # the dashboard empty while the live broker pipeline is being attempted.
+        fallback_future = executor.submit(scanner._fallback_yfinance_scan, 6)
+        broker_future = executor.submit(lambda: scanner.scan_market(limit=12, include_indices=False))
 
         fallback_published = False
         try:
@@ -165,8 +165,6 @@ def _run_market_scan():
                         }, started)
                 except Exception as fallback_error:
                     print("BACKGROUND LATE FALLBACK ERROR:", fallback_error)
-        finally:
-            fallback_executor.shutdown(wait=False, cancel_futures=False)
         return True
     except Exception as error:
         print("BACKGROUND X10 SCANNER ERROR:", error)
@@ -174,6 +172,7 @@ def _run_market_scan():
             _scan_state["last_error"] = str(error)
         return False
     finally:
+        executor.shutdown(wait=False, cancel_futures=False)
         with _scan_lock:
             _scan_state["refreshing"] = False
 
