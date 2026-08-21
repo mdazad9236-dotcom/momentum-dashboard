@@ -92,14 +92,12 @@ def _run_market_scan():
         _scan_state["refreshing"] = True
     started = time.time()
     try:
-        scanner = AngelScanner(batch_size=5, delay=0.03, max_workers=5)
+        scanner = AngelScanner(batch_size=3, delay=0.03, max_workers=3)
 
-        # Indexes are independent of the large stock instrument master. Refresh
-        # them first so the dashboard can show market context even if the stock
-        # universe download is slow or temporarily unavailable.
-        _run_index_refresh()
-
-        result = scanner.scan_market(limit=30, include_indices=False)
+        # Index refresh runs independently. Do NOT wait for index history here:
+        # waiting for four index candle requests before starting the stock scan
+        # made the stock cards appear empty while the scanner was still working.
+        result = scanner.scan_market(limit=12, include_indices=False)
         if not result.get("success"):
             raise RuntimeError(result.get("message", "Angel One scanner failed."))
 
@@ -257,32 +255,3 @@ def instrument_endpoint(symbol):
         if not stock: return jsonify({"success": False, "message": "Stock not found."}), 404
         return jsonify({"success": True, "stock": stock})
     except Exception as error: return jsonify({"success": False, "message": str(error)}), 500
-
-@app.route("/api/ai-assistant", methods=["POST"])
-@login_required
-def ai_assistant():
-    api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if not api_key: return jsonify({"success": False, "message": "AI Assistant is not configured yet. Add OPENAI_API_KEY to the Render environment variables."}), 503
-    body = request.get_json(silent=True) or {}; question = str(body.get("message", "")).strip()
-    if not question: return jsonify({"success": False, "message": "Please enter a stock or market question."}), 400
-    if len(question) > 4000: question = question[:4000]
-    snapshot = _snapshot_response(); context = {"indices": snapshot.get("indices", []), "top_stocks": snapshot.get("stocks", [])[:12], "updated_at": snapshot.get("updated_at")}
-    system_prompt = """You are Azad AI Plus, a concise Indian stock-market research assistant. Answer questions about NSE/BSE stocks, indices, technical analysis, market structure, corporate developments and current market news. For anything time-sensitive, especially current news, today's market, recent events, prices or announcements, use web search and clearly distinguish confirmed facts from interpretation. Use the supplied live X10/Angel One snapshot when relevant. Never invent prices, news, targets or company facts. If the user asks whether to buy, provide a decision-support view with bull case, bear case, key levels and risk; do not present certainty or guaranteed returns. Prefer Indian market terminology and INR. Keep answers practical and easy to read. Mention when information is delayed or requires confirmation from the live broker feed."""
-    user_prompt = f"User question:\n{question}\n\nCurrent Azad AI Plus market snapshot:\n{context}\n\nAnswer the user's question directly. If current news is requested, search the web before answering and include the publication/source names and dates in the response."
-    payload = {"model": os.getenv("OPENAI_MODEL", "gpt-5.6-luna"), "input": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}], "tools": [{"type": "web_search"}], "max_output_tokens": 1400}
-    try:
-        response = requests.post("https://api.openai.com/v1/responses", headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json=payload, timeout=45); data = response.json()
-        if response.status_code >= 400: return jsonify({"success": False, "message": data.get("error", {}).get("message", "AI service request failed.")}), 502
-        answer = data.get("output_text", "").strip()
-        if not answer:
-            for item in data.get("output", []):
-                for content in item.get("content", []):
-                    if content.get("type") in ("output_text", "text"): answer += content.get("text", "")
-        return jsonify({"success": True, "answer": answer or "I couldn't generate an answer right now. Please try again.", "model": payload["model"]})
-    except requests.RequestException as error: return jsonify({"success": False, "message": f"AI service connection failed: {error}"}), 502
-
-@app.route("/health")
-def health():
-    return jsonify({"status": "ok", "service": "Azad AI Plus", "ai_configured": bool(os.getenv("OPENAI_API_KEY"))})
-
-if __name__ == "__main__": app.run(host="0.0.0.0", port=5000, debug=False)
