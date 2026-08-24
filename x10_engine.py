@@ -36,6 +36,72 @@ class X10Engine:
         elif volume_ratio >= 1.2: score += 5
         return max(0, min(int(score), 100))
 
+    def calculate_early_momentum(self, analysis):
+        """Score acceleration quality without rewarding already-overextended moves."""
+        score = 0
+        reasons = []
+        rsi = float(analysis.get("rsi", 50) or 50)
+        volume_ratio = float(analysis.get("volume_ratio", 0) or 0)
+        adx = float(analysis.get("adx", 0) or 0)
+        plus_di = float(analysis.get("plus_di", 0) or 0)
+        minus_di = float(analysis.get("minus_di", 0) or 0)
+        macd_hist = float(analysis.get("macd_histogram", 0) or 0)
+        price = float(analysis.get("price", 0) or 0)
+        ema20 = float(analysis.get("ema20", 0) or 0)
+        ema50 = float(analysis.get("ema50", 0) or 0)
+        high_52 = float(analysis.get("52_week_high", 0) or 0)
+
+        if 52 <= rsi <= 68:
+            score += 20
+            reasons.append("RSI in healthy acceleration zone")
+        elif 68 < rsi <= 72:
+            score += 8
+            reasons.append("Momentum strong but approaching extension")
+        elif rsi > 75:
+            score -= 25
+            reasons.append("Already overextended")
+
+        if volume_ratio >= 1.5:
+            score += 20
+            reasons.append("Volume expansion")
+        elif volume_ratio >= 1.2:
+            score += 10
+            reasons.append("Volume improving")
+
+        if macd_hist > 0:
+            score += 15
+            reasons.append("Positive MACD acceleration")
+        if adx >= 20 and plus_di > minus_di:
+            score += 15
+            reasons.append("Directional trend strengthening")
+
+        if price > 0 and ema20 > 0 and ema50 > 0:
+            if price >= ema20 and ema20 >= ema50:
+                score += 15
+                reasons.append("Price aligned above rising trend averages")
+            elif price >= ema20:
+                score += 7
+
+        if price > 0 and high_52 > 0:
+            distance = (high_52 - price) / price
+            if 0.03 <= distance <= 0.20:
+                score += 15
+                reasons.append("Close enough to breakout territory")
+            elif distance < 0.03:
+                score -= 8
+                reasons.append("Too close to recent high / chase risk")
+
+        score = max(0, min(int(score), 100))
+        if score >= 70:
+            stage = "EARLY ACCELERATION"
+        elif score >= 50:
+            stage = "BUILDING MOMENTUM"
+        elif score >= 30:
+            stage = "WATCH"
+        else:
+            stage = "NOT EARLY"
+        return {"score": score, "stage": stage, "reasons": reasons[:4]}
+
     def get_signal(self, score):
         if score >= 80: return "STRONG BUY"
         if score >= 70: return "BUY"
@@ -129,14 +195,50 @@ class X10Engine:
         }
 
     def analyze(self, analysis):
-        score = self.calculate_score(analysis)
-        signal = self.get_signal(score)
+        base_score = self.calculate_score(analysis)
+        early = self.calculate_early_momentum(analysis)
         plan = self.calculate_trade_plan(analysis)
+
+        # Phase 4: reward early, healthy acceleration but penalize overextension.
+        # Keep the original X10 score dominant while using early momentum as a
+        # decision-quality modifier rather than replacing the X10 methodology.
+        x10_score = round((base_score * 0.75) + (early["score"] * 0.25))
+        signal = self.get_signal(x10_score)
+
+        validation = []
+        if early["stage"] in ("EARLY ACCELERATION", "BUILDING MOMENTUM"):
+            validation.append("EARLY MOMENTUM")
+        if plan["risk_reward_value"] >= 1.5:
+            validation.append("R:R VALID")
+        else:
+            validation.append("WEAK R:R")
+        if plan["dont_chase"]:
+            validation.append("DON'T CHASE")
+        if x10_score < 60:
+            validation.append("LOW X10")
+
+        why_buy = "; ".join(early["reasons"][:3]) if early["reasons"] else "No strong early-momentum confirmation"
+        risks = []
+        if early["stage"] == "NOT EARLY": risks.append("Momentum is not early-stage")
+        if float(analysis.get("rsi", 50) or 50) > 72: risks.append("RSI is extended")
+        if float(analysis.get("volume_ratio", 0) or 0) < 1.0: risks.append("Volume confirmation is weak")
+        if plan["risk_reward_value"] < 1.5: risks.append("Risk/reward is below preferred threshold")
+        if plan["dont_chase"]: risks.append("Price has moved beyond the planned chase zone")
+        why_not_buy = "; ".join(risks[:3]) if risks else "No major validation warning"
+
         if plan["dont_chase"] and signal in ("STRONG BUY", "BUY"):
             signal = "WAIT / DON'T CHASE"
+
         return {
-            "x10_score": score,
+            "x10_score": max(0, min(int(x10_score), 100)),
+            "base_x10_score": base_score,
             "signal": signal,
+            "early_momentum_score": early["score"],
+            "momentum_stage": early["stage"],
+            "early_momentum_reasons": early["reasons"],
+            "validation": validation,
+            "why_buy": why_buy,
+            "why_not_buy": why_not_buy,
             "entry": plan["entry"],
             "entry_low": plan["entry_low"],
             "entry_high": plan["entry_high"],
