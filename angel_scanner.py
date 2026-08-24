@@ -36,6 +36,82 @@ class AngelScanner:
         self.delay = max(0.0, float(delay))
         self.max_workers = max(1, int(max_workers))
 
+    @staticmethod
+    def _opportunity_rank(item):
+        """Phase 4 decision ranking: keep X10 dominant, then reward validated early setups."""
+        x10 = float(item.get("x10_score", 0) or 0)
+        early = float(item.get("early_momentum_score", 0) or 0)
+        rr = float(item.get("risk_reward_value", 0) or 0)
+        setup = str(item.get("setup_quality", "WEAK")).upper()
+        stage = str(item.get("momentum_stage", "NOT EARLY")).upper()
+        dont_chase = bool(item.get("dont_chase", False))
+        signal = str(item.get("signal", "AVOID")).upper()
+
+        # X10 remains the largest component. Early momentum is a modifier,
+        # not a replacement for the existing X10 methodology.
+        rank = x10 * 0.65
+        rank += min(early, 100) * 0.20
+        rank += min(max(rr, 0), 4) * 5.0
+
+        if setup == "GOOD":
+            rank += 6
+        elif setup == "FAIR":
+            rank += 2
+        if stage == "EARLY ACCELERATION":
+            rank += 5
+        elif stage == "BUILDING MOMENTUM":
+            rank += 2
+        if signal == "STRONG BUY":
+            rank += 3
+        elif signal == "BUY":
+            rank += 2
+        if dont_chase:
+            rank -= 18
+        if rr < 1.5:
+            rank -= 10
+        if x10 < 60:
+            rank -= 8
+        return round(rank, 2)
+
+    def _rank_results(self, results):
+        """Attach a transparent decision rank and return best validated opportunities first."""
+        ranked = []
+        for item in results:
+            item["opportunity_rank"] = self._opportunity_rank(item)
+            item["ranking_reason"] = self._ranking_reason(item)
+            ranked.append(item)
+        ranked.sort(
+            key=lambda item: (
+                item.get("opportunity_rank", 0),
+                item.get("x10_score", 0),
+                item.get("early_momentum_score", 0),
+                item.get("risk_reward_value", 0),
+            ),
+            reverse=True,
+        )
+        return ranked
+
+    @staticmethod
+    def _ranking_reason(item):
+        reasons = []
+        if float(item.get("x10_score", 0) or 0) >= 70:
+            reasons.append("strong X10")
+        stage = str(item.get("momentum_stage", "")).upper()
+        if stage == "EARLY ACCELERATION":
+            reasons.append("early acceleration")
+        elif stage == "BUILDING MOMENTUM":
+            reasons.append("building momentum")
+        rr = float(item.get("risk_reward_value", 0) or 0)
+        if rr >= 2:
+            reasons.append("healthy R:R")
+        elif rr >= 1.5:
+            reasons.append("acceptable R:R")
+        if not item.get("dont_chase", False):
+            reasons.append("entry not extended")
+        else:
+            reasons.append("chase risk")
+        return ", ".join(reasons[:4]) or "awaiting stronger validation"
+
     def analyze_stock(self, stock):
         symbol, token, name = stock.get("symbol"), stock.get("token"), stock.get("name", stock.get("symbol"))
         if not symbol or not token:
@@ -67,12 +143,19 @@ class AngelScanner:
         return {
             "symbol": symbol, "token": str(token or ""), "name": name, "price": analysis.get("price", 0),
             "technical_score": analysis.get("technical_score", 0), "x10_score": x10.get("x10_score", 0),
+            "base_x10_score": x10.get("base_x10_score", 0),
             "success_probability": x10.get("x10_score", 0), "signal": x10.get("signal", "AVOID"),
+            "early_momentum_score": x10.get("early_momentum_score", 0),
+            "momentum_stage": x10.get("momentum_stage", "NOT EARLY"),
+            "early_momentum_reasons": x10.get("early_momentum_reasons", []),
+            "validation": x10.get("validation", []),
+            "why_buy": x10.get("why_buy", ""), "why_not_buy": x10.get("why_not_buy", ""),
             "entry": x10.get("entry", 0), "entry_low": x10.get("entry_low", 0), "entry_high": x10.get("entry_high", 0),
             "stop_loss": x10.get("stop_loss", 0), "target": x10.get("target", 0),
             "target_1": x10.get("target_1", 0), "target_2": x10.get("target_2", 0),
             "risk": x10.get("risk", 0), "reward": x10.get("reward", 0),
             "risk_reward": x10.get("risk_reward", "1:0"), "risk_reward_value": x10.get("risk_reward_value", 0),
+            "risk_reward_display": x10.get("risk_reward_display", x10.get("risk_reward", "1:0")),
             "trailing_stop": x10.get("trailing_stop", 0), "chase_price": x10.get("chase_price", 0),
             "dont_chase": x10.get("dont_chase", False), "setup_quality": x10.get("setup_quality", "WEAK"),
             "trend": analysis.get("trend", "Neutral"), "momentum": analysis.get("momentum", "Neutral"),
@@ -104,7 +187,6 @@ class AngelScanner:
 
     @staticmethod
     def _yahoo_candidate(symbol):
-        """Fetch and X10-analyze one fallback ticker independently."""
         try:
             history = yf.Ticker(f"{symbol}.NS").history(period="6mo", interval="1d", auto_adjust=False)
             if history is None or history.empty:
@@ -116,19 +198,20 @@ class AngelScanner:
             if not x10:
                 return None
             return {
-                "symbol": symbol,
-                "token": "",
-                "name": symbol,
-                "price": analysis.get("price", 0),
-                "technical_score": analysis.get("technical_score", 0),
-                "x10_score": x10.get("x10_score", 0),
-                "success_probability": x10.get("x10_score", 0),
-                "signal": x10.get("signal", "AVOID"),
+                "symbol": symbol, "token": "", "name": symbol, "price": analysis.get("price", 0),
+                "technical_score": analysis.get("technical_score", 0), "x10_score": x10.get("x10_score", 0),
+                "base_x10_score": x10.get("base_x10_score", 0), "success_probability": x10.get("x10_score", 0),
+                "signal": x10.get("signal", "AVOID"), "early_momentum_score": x10.get("early_momentum_score", 0),
+                "momentum_stage": x10.get("momentum_stage", "NOT EARLY"),
+                "early_momentum_reasons": x10.get("early_momentum_reasons", []),
+                "validation": x10.get("validation", []), "why_buy": x10.get("why_buy", ""),
+                "why_not_buy": x10.get("why_not_buy", ""),
                 "entry": x10.get("entry", 0), "entry_low": x10.get("entry_low", 0), "entry_high": x10.get("entry_high", 0),
                 "stop_loss": x10.get("stop_loss", 0), "target": x10.get("target", 0),
                 "target_1": x10.get("target_1", 0), "target_2": x10.get("target_2", 0),
                 "risk": x10.get("risk", 0), "reward": x10.get("reward", 0),
                 "risk_reward": x10.get("risk_reward", "1:0"), "risk_reward_value": x10.get("risk_reward_value", 0),
+                "risk_reward_display": x10.get("risk_reward_display", x10.get("risk_reward", "1:0")),
                 "trailing_stop": x10.get("trailing_stop", 0), "chase_price": x10.get("chase_price", 0),
                 "dont_chase": x10.get("dont_chase", False), "setup_quality": x10.get("setup_quality", "WEAK"),
                 "trend": analysis.get("trend", "Neutral"), "momentum": analysis.get("momentum", "Neutral"),
@@ -146,7 +229,6 @@ class AngelScanner:
             return None
 
     def _fallback_yfinance_scan(self, limit=6):
-        """Run fallback tickers concurrently so a broker outage cannot leave the UI empty for minutes."""
         symbols = FALLBACK_STOCKS[:max(1, int(limit))]
         results = []
         with ThreadPoolExecutor(max_workers=min(4, len(symbols))) as executor:
@@ -155,7 +237,7 @@ class AngelScanner:
                 result = future.result()
                 if result:
                     results.append(result)
-        results.sort(key=lambda x: (x.get("x10_score", 0), x.get("risk_reward_value", 0)), reverse=True)
+        results = self._rank_results(results)
         return results[:max(1, int(limit))]
 
     def _get_index_snapshots(self):
@@ -262,7 +344,7 @@ class AngelScanner:
             results.extend(self._analyze_batch(selected[offset:offset + self.batch_size]))
             if self.delay:
                 time.sleep(self.delay)
-        results.sort(key=lambda item: (item.get("x10_score", 0), item.get("risk_reward_value", 0)), reverse=True)
+        results = self._rank_results(results)
         top_results = results[:5]
 
         analyzed_symbols = {str(item.get("symbol", "")).upper() for item in results}
