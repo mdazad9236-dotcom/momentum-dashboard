@@ -7,14 +7,26 @@ from datetime import datetime
 INSTRUMENT_URL = "https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json"
 CACHE_FILE = "angel_instruments.json"
 TEMP_CACHE_FILE = "angel_instruments.json.tmp"
-DOWNLOAD_ATTEMPTS = 5
+DOWNLOAD_ATTEMPTS = 3
 CHUNK_SIZE = 1024 * 1024
+FAILURE_COOLDOWN_SECONDS = 600
 
 
 class AngelInstrumentManager:
+    """Load Angel's large instrument master once and fail fast when the source is unavailable."""
+
+    _shared_instruments = None
+    _shared_stock_cache = None
+    _shared_failure_until = 0.0
+    _shared_failure_message = None
+
     def __init__(self):
-        self.instruments = []
-        self._stock_cache = None
+        self.instruments = self.__class__._shared_instruments or []
+        self._stock_cache = self.__class__._shared_stock_cache
+
+    def _sync_shared(self):
+        self.__class__._shared_instruments = self.instruments or None
+        self.__class__._shared_stock_cache = self._stock_cache
 
     def _save_cache_atomically(self, data):
         with open(TEMP_CACHE_FILE, "w", encoding="utf-8") as file:
@@ -24,12 +36,14 @@ class AngelInstrumentManager:
         os.replace(TEMP_CACHE_FILE, CACHE_FILE)
 
     def _download_once(self):
-        """Download the large Angel master to disk and resume interrupted reads."""
-        existing_size = os.path.getsize(TEMP_CACHE_FILE) if os.path.exists(TEMP_CACHE_FILE) else 0
-        headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
-        if existing_size:
-            headers["Range"] = f"bytes={existing_size}-"
+        """Download a fresh master; never resume a known-invalid partial JSON file."""
+        try:
+            if os.path.exists(TEMP_CACHE_FILE):
+                os.remove(TEMP_CACHE_FILE)
+        except OSError:
+            pass
 
+        headers = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
         response = requests.get(
             INSTRUMENT_URL,
             stream=True,
@@ -37,18 +51,8 @@ class AngelInstrumentManager:
             headers=headers,
         )
         response.raise_for_status()
-
-        # A server that ignores Range returns 200. Restart the temporary file
-        # rather than appending the complete response to a partial download.
-        append = existing_size > 0 and response.status_code == 206
-        if not append:
-            existing_size = 0
-            mode = "wb"
-        else:
-            mode = "ab"
-
         try:
-            with open(TEMP_CACHE_FILE, mode) as file:
+            with open(TEMP_CACHE_FILE, "wb") as file:
                 for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
                     if chunk:
                         file.write(chunk)
@@ -57,9 +61,6 @@ class AngelInstrumentManager:
         finally:
             response.close()
 
-        # Parse only after the entire response has been written. A truncated
-        # JSON document raises JSONDecodeError and leaves the partial file in
-        # place so the next attempt can resume it when Range is supported.
         with open(TEMP_CACHE_FILE, "rb") as file:
             payload = file.read()
         if not payload:
@@ -70,6 +71,14 @@ class AngelInstrumentManager:
         return data
 
     def download_master(self):
+        now = time.time()
+        if now < self.__class__._shared_failure_until:
+            return {
+                "success": False,
+                "count": 0,
+                "message": self.__class__._shared_failure_message or "Instrument master temporarily unavailable; using fallback.",
+            }
+
         last_error = None
         for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
             try:
@@ -77,6 +86,9 @@ class AngelInstrumentManager:
                 self._save_cache_atomically(data)
                 self.instruments = data
                 self._stock_cache = None
+                self._sync_shared()
+                self.__class__._shared_failure_until = 0.0
+                self.__class__._shared_failure_message = None
                 message = "Instrument master downloaded."
                 if attempt > 1:
                     message = f"Instrument master downloaded on retry {attempt}."
@@ -89,17 +101,26 @@ class AngelInstrumentManager:
                     f"Angel instrument master download attempt {attempt}/{DOWNLOAD_ATTEMPTS} "
                     f"failed after {partial_size} bytes: {error}"
                 )
+                try:
+                    os.remove(TEMP_CACHE_FILE)
+                except OSError:
+                    pass
                 if attempt < DOWNLOAD_ATTEMPTS:
-                    time.sleep(min(2 ** (attempt - 1), 10))
-        return {
-            "success": False,
-            "count": 0,
-            "message": f"Unable to download Angel One instrument master after {DOWNLOAD_ATTEMPTS} attempts: {last_error}",
-        }
+                    time.sleep(min(2 ** (attempt - 1), 5))
+
+        message = f"Unable to download Angel One instrument master after {DOWNLOAD_ATTEMPTS} attempts: {last_error}"
+        self.__class__._shared_failure_until = time.time() + FAILURE_COOLDOWN_SECONDS
+        self.__class__._shared_failure_message = message
+        print(f"[INSTRUMENT] Cooling down master download for {FAILURE_COOLDOWN_SECONDS}s; fallback remains available.")
+        return {"success": False, "count": 0, "message": message}
 
     def load_cache(self):
         if self.instruments:
             return {"success": True, "count": len(self.instruments), "message": "Instrument cache already loaded."}
+        if self.__class__._shared_instruments:
+            self.instruments = self.__class__._shared_instruments
+            self._stock_cache = self.__class__._shared_stock_cache
+            return {"success": True, "count": len(self.instruments), "message": "Shared instrument cache loaded."}
         if os.path.exists(CACHE_FILE):
             try:
                 with open(CACHE_FILE, "r", encoding="utf-8") as file:
@@ -107,6 +128,8 @@ class AngelInstrumentManager:
                 if not isinstance(data, list) or not data:
                     raise ValueError("Instrument cache is empty or invalid.")
                 self.instruments = data
+                self._stock_cache = None
+                self._sync_shared()
                 return {"success": True, "count": len(data), "message": "Instrument cache loaded."}
             except (json.JSONDecodeError, OSError, ValueError) as error:
                 print("Instrument cache read error; rebuilding cache:", error)
@@ -119,6 +142,10 @@ class AngelInstrumentManager:
     def refresh(self):
         self.instruments = []
         self._stock_cache = None
+        self.__class__._shared_instruments = None
+        self.__class__._shared_stock_cache = None
+        self.__class__._shared_failure_until = 0.0
+        self.__class__._shared_failure_message = None
         for path in (CACHE_FILE, TEMP_CACHE_FILE):
             try:
                 os.remove(path)
@@ -149,6 +176,7 @@ class AngelInstrumentManager:
                 "instrumenttype": str(item.get("instrumenttype", "")).strip(),
             })
         self._stock_cache = stocks
+        self._sync_shared()
         return stocks
 
     def find_stock(self, symbol):
