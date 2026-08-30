@@ -253,9 +253,12 @@ def logout():
 @login_required
 def home():
     html = render_template("index.html")
-    # The dashboard already uses a server-side cache for market scans. Polling the
-    # cached snapshot once per minute is enough and reduces needless HTTP traffic.
     html = html.replace("timer=setInterval(()=>{loadScan();loadIndices()},30000);", "timer=setInterval(()=>{loadScan();loadIndices()},60000);")
+    # Phase 4 Step 2: guard dashboard polling against duplicate in-flight requests
+    # and stop polling while the browser tab is hidden. The backend remains the
+    # source of truth and continues its own cached background refresh.
+    guard_js = '''<script>(function(){\nconst originalLoadScan=window.loadScan,originalLoadIndices=window.loadIndices;\nlet scanBusy=false,indexBusy=false;\nwindow.loadScan=async function(){if(scanBusy||document.hidden)return;scanBusy=true;try{return await originalLoadScan()}finally{scanBusy=false}};\nwindow.loadIndices=async function(){if(indexBusy||document.hidden)return;indexBusy=true;try{return await originalLoadIndices()}finally{indexBusy=false}};\nif(window.timer)clearInterval(window.timer);\nwindow.timer=setInterval(function(){if(!document.hidden){window.loadScan();window.loadIndices()}},60000);\ndocument.addEventListener('visibilitychange',function(){if(!document.hidden){window.loadScan();window.loadIndices()}});\n})();</script>'''
+    html = html.replace("</body>", guard_js + "</body>")
     return html
 
 @app.route("/api/analyze/<symbol>")
