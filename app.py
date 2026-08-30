@@ -252,7 +252,11 @@ def logout():
 @app.route("/")
 @login_required
 def home():
-    return render_template("index.html")
+    html = render_template("index.html")
+    # The dashboard already uses a server-side cache for market scans. Polling the
+    # cached snapshot once per minute is enough and reduces needless HTTP traffic.
+    html = html.replace("timer=setInterval(()=>{loadScan();loadIndices()},30000);", "timer=setInterval(()=>{loadScan();loadIndices()},60000);")
+    return html
 
 @app.route("/api/analyze/<symbol>")
 @login_required
@@ -306,4 +310,4 @@ def instrument_endpoint(symbol):
         stock = instrument_manager.find_stock(symbol)
         if not stock: return jsonify({"success": False, "message": "Stock not found."}), 404
         return jsonify({"success": True, "stock": stock})
-    except Exception as error: return jsonify({"success": False, "message": str(error)}), 500
+    except Exception as error: return jsonify({"success": False, "message": str(error)}), 404
