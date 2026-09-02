@@ -299,7 +299,32 @@ window.renderDNA=function(s){
  const target=document.getElementById('azDna');if(target)target.innerHTML=html;
 };
 })();</script>'''
-    html = html.replace("</body>", guard_js + step3_js + "</body>")
+
+    # Phase 5 Step 1: broker-style visual shell. Presentation-only; no market
+    # data, X10 scoring, ranking, trade-plan or refresh behavior is changed.
+    broker_ui_js = '''<style>
+:root{--az-glow:rgba(72,167,255,.16);--az-panel-2:#0a1827}
+body{background:radial-gradient(circle at 72% -15%,rgba(72,167,255,.16),transparent 34%),radial-gradient(circle at 12% 0%,rgba(255,122,24,.08),transparent 28%),#06101d}
+.top{height:72px;padding:0 26px;background:rgba(5,14,25,.92);box-shadow:0 8px 30px rgba(0,0,0,.16)}
+.logo{letter-spacing:-.35px}.logo:before{content:'◈';display:inline-block;margin-right:8px;color:var(--blue);font-size:17px}
+.search input{height:40px;background:#071522;border-color:#29445d;box-shadow:inset 0 0 0 1px rgba(255,255,255,.015)}
+.topright .live{padding:6px 9px;border:1px solid rgba(32,209,139,.25);border-radius:999px;background:rgba(32,209,139,.07)}
+.layout{grid-template-columns:228px 1fr}aside{background:rgba(4,12,22,.72);box-shadow:12px 0 40px rgba(0,0,0,.08)}
+nav a{border:1px solid transparent;transition:.18s ease}nav a:hover{border-color:#29445d;transform:translateX(2px)}
+.main{max-width:1760px;padding:27px 30px 70px}.hero{padding:3px 2px 4px}.hero h1{letter-spacing:-.7px}.hero p{max-width:720px}
+.btn{box-shadow:0 8px 24px rgba(255,122,24,.16);transition:.18s ease}.btn:hover{transform:translateY(-1px);filter:brightness(1.04)}
+.section{margin-top:27px}.head h2{letter-spacing:-.25px}.head .hint{padding:6px 9px;border:1px solid #20384f;border-radius:999px;background:#091827}
+.card{background:linear-gradient(145deg,rgba(16,36,58,.98),rgba(7,19,32,.98));box-shadow:0 12px 34px rgba(0,0,0,.17);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}.card:hover{border-color:#31516d;box-shadow:0 18px 42px rgba(0,0,0,.24)}
+.index,.op{padding:18px}.index:after{content:'›';float:right;color:#58718a;font-size:18px;margin-top:-2px}.price{font-size:25px;letter-spacing:-.4px}.op h3{font-size:15px}.rank{padding:4px 7px;border-radius:999px;background:rgba(255,122,24,.09);border:1px solid rgba(255,122,24,.2)}
+.trade div{background:rgba(3,12,22,.58);border-color:#1d3850}.trade b{font-size:11px}.pill{border:1px solid rgba(32,209,139,.18)}
+.slab{background:linear-gradient(145deg,#0e2033,#081522)}.slabhead{background:linear-gradient(90deg,rgba(72,167,255,.08),rgba(255,122,24,.06))}.row:hover{background:rgba(72,167,255,.05)}
+.tablebox,.chart,.assistant{box-shadow:0 15px 40px rgba(0,0,0,.16)}
+.az-modal{background:rgba(1,7,14,.88)}.az-dialog{box-shadow:0 40px 120px rgba(0,0,0,.72)}
+@media(max-width:700px){.top{height:64px;padding:0 12px}.main{padding:17px 12px 55px}.hero h1{font-size:24px}.head .hint{display:none}}
+</style><script>(function(){
+const mark=document.createElement('div');mark.id='azMarketShellStatus';mark.innerHTML='<span class="az-shell-dot">●</span> X10 DECISION CENTER';mark.style.cssText='position:fixed;bottom:14px;right:16px;z-index:20;padding:7px 10px;border:1px solid #20384f;border-radius:999px;background:rgba(7,17,31,.88);backdrop-filter:blur(10px);color:#8397ab;font-size:9px;font-weight:900;letter-spacing:.5px;box-shadow:0 8px 25px rgba(0,0,0,.25)';document.body.appendChild(mark);
+})();</script>'''
+    html = html.replace("</body>", guard_js + step3_js + broker_ui_js + "</body>")
     return html
 
 @app.route("/api/analyze/<symbol>")
