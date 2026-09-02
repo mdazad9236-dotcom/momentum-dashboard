@@ -1,4 +1,4 @@
-/* TradingView chart replacement: stocks + indices only. */
+/* TradingView Advanced Chart: embedded inside the existing analysis modal for stocks + indices. */
 (function () {
   function symbolForInstrument(s) {
     const raw = String((s && (s.symbol || s.name)) || '').trim().toUpperCase();
@@ -21,13 +21,23 @@
   function mount(symbol) {
     const wrap = document.getElementById('azChartWrap');
     if (!wrap) return;
-    wrap.innerHTML = '<div class="tradingview-widget-container" style="height:100%;width:100%"><div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div></div>';
-    const host = wrap.querySelector('.tradingview-widget-container');
+
+    wrap.innerHTML = '';
+    const host = document.createElement('div');
+    host.className = 'tradingview-widget-container';
+    host.style.cssText = 'height:100%;width:100%;';
+
+    const widget = document.createElement('div');
+    widget.className = 'tradingview-widget-container__widget';
+    widget.style.cssText = 'height:100%;width:100%;';
+    host.appendChild(widget);
+    wrap.appendChild(host);
+
     const script = document.createElement('script');
     script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
     script.async = true;
     script.type = 'text/javascript';
-    script.textContent = JSON.stringify({
+    script.text = JSON.stringify({
       autosize: true,
       width: '100%',
       height: '100%',
@@ -46,40 +56,57 @@
       studies: ['Volume@tv-basicstudies']
     });
     host.appendChild(script);
+
     const status = document.getElementById('azChartStatus');
-    if (status) status.textContent = 'TradingView · ' + symbol + ' · Interactive chart';
+    if (status) status.textContent = 'TradingView · ' + symbol + ' · Embedded';
     const hint = document.getElementById('azChartHint');
-    if (hint) hint.textContent = 'TradingView chart · drawing tools, indicators, timeframes, volume, zoom and pan are available. X10 levels remain in the decision panel.';
+    if (hint) hint.textContent = 'Embedded TradingView Advanced Chart · drawing tools, indicators, timeframes, volume, zoom and pan are available. X10 levels remain in the decision panel.';
   }
 
   function install() {
-    if (typeof window.openInstrument !== 'function' || window.__azTradingViewInstalled) return;
-    const originalOpenInstrument = window.openInstrument;
+    if (window.__azTradingViewInstalled) return true;
+    if (typeof window.openInstrument !== 'function') return false;
+
+    const modal = document.getElementById('azModal');
+    if (!modal) return false;
+
+    window.__azTradingViewOriginalOpenInstrument = window.openInstrument;
     window.openInstrument = function (raw) {
       const s = raw || {};
-      currentInstrument = s;
-      const modal = document.getElementById('azModal');
-      if (modal) {
-        modal.classList.add('open');
-        modal.setAttribute('aria-hidden', 'false');
-      }
+      window.currentInstrument = s;
+
+      modal.classList.add('open');
+      modal.setAttribute('aria-hidden', 'false');
       document.body.style.overflow = 'hidden';
+
       const title = document.getElementById('azTitle');
       const subtitle = document.getElementById('azSubtitle');
       if (title) title.textContent = s.name || s.symbol || 'Market Instrument';
       if (subtitle) subtitle.textContent = (s.symbol || s.name || '') + ' · TradingView' + (s.isIndex ? ' · INDEX' : ' · X10');
+
       if (typeof window.renderDNA === 'function') window.renderDNA(s);
       if (typeof window.renderTrade === 'function') window.renderTrade(s);
       if (typeof window.switchTab === 'function') window.switchTab('chart');
+
       mount(symbolForInstrument(s));
       return Promise.resolve();
     };
+
     window.__azTradingViewInstalled = true;
-    window.__azTradingViewOriginalOpenInstrument = originalOpenInstrument;
+    return true;
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
-  else install();
-  setTimeout(install, 250);
-  setTimeout(install, 1000);
+  function boot() {
+    if (install()) return;
+    setTimeout(install, 100);
+    setTimeout(install, 500);
+    setTimeout(install, 1200);
+    setTimeout(install, 2500);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
 })();
