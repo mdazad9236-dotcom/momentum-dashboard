@@ -258,7 +258,48 @@ def home():
     # and stop polling while the browser tab is hidden. The backend remains the
     # source of truth and continues its own cached background refresh.
     guard_js = '''<script>(function(){\nconst originalLoadScan=window.loadScan,originalLoadIndices=window.loadIndices;\nlet scanBusy=false,indexBusy=false;\nwindow.loadScan=async function(){if(scanBusy||document.hidden)return;scanBusy=true;try{return await originalLoadScan()}finally{scanBusy=false}};\nwindow.loadIndices=async function(){if(indexBusy||document.hidden)return;indexBusy=true;try{return await originalLoadIndices()}finally{indexBusy=false}};\nif(window.timer)clearInterval(window.timer);\nwindow.timer=setInterval(function(){if(!document.hidden){window.loadScan();window.loadIndices()}},60000);\ndocument.addEventListener('visibilitychange',function(){if(!document.hidden){window.loadScan();window.loadIndices()}});\n})();</script>'''
-    html = html.replace("</body>", guard_js + "</body>")
+
+    # Phase 4 Step 3: make X10 decision intelligence visible inside Stock DNA.
+    # This only changes presentation. X10 scoring, ranking and trade-plan logic
+    # continue to come from the backend engine without modification.
+    step3_js = '''<style>
+.az-dna-hero{padding:13px;border-radius:12px;background:linear-gradient(135deg,rgba(255,122,24,.13),rgba(72,167,255,.08));border:1px solid #29445d}.az-dna-hero-row{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:10px}.az-dna-stat{background:#081522;border:1px solid #183149;border-radius:8px;padding:9px}.az-dna-stat small{display:block;color:#71879b;font-size:8px}.az-dna-stat b{display:block;margin-top:4px;font-size:12px}.az-reason-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.az-reason{border-radius:10px;padding:11px;border:1px solid #20384f;background:#081522}.az-reason.good{border-color:rgba(32,209,139,.35);background:rgba(32,209,139,.06)}.az-reason.bad{border-color:rgba(255,93,108,.35);background:rgba(255,93,108,.06)}.az-reason h3{font-size:11px!important;margin:0 0 7px!important}.az-reason p{margin:0;color:#a9b9ca;font-size:10px;line-height:1.55}.az-validation{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}.az-validation span{padding:5px 7px;border-radius:999px;background:#091827;border:1px solid #29445d;color:#aebfd0;font-size:8px;font-weight:900}.az-validation .warn{color:#ff9aa3;border-color:rgba(255,93,108,.4)}.az-dna-tech{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.az-dna-tech .az-metric{border:1px solid #183149}.az-dna-note{margin-top:8px;color:#71879b;font-size:9px;line-height:1.45}@media(max-width:700px){.az-dna-hero-row,.az-dna-tech{grid-template-columns:repeat(2,1fr)}.az-reason-grid{grid-template-columns:1fr}}
+</style><script>(function(){
+const originalRenderDNA=window.renderDNA;
+function textValue(v,fallback){if(Array.isArray(v))return v.filter(Boolean).join(' · ');if(v&&typeof v==='object')return Object.entries(v).map(function(x){return x[0]+': '+x[1]}).join(' · ');const t=String(v??'').trim();return(!t||t==='0')?(fallback||'—'):t}
+function ratioValue(s){if(s.risk_reward_display&&String(s.risk_reward_display)!=='0')return String(s.risk_reward_display);const n=Number(s.risk_reward_value||s.risk_reward);return Number.isFinite(n)&&n>0?'1 : '+n.toFixed(1):'—'}
+function scoreValue(v){const n=Number(v);return Number.isFinite(n)&&n>=0?n.toFixed(0):'—'}
+window.renderDNA=function(s){
+ if(s&&s.isIndex){return originalRenderDNA(s)}
+ s=s||{};
+ const whyBuy=textValue(s.why_buy,'No strong early-momentum confirmation yet.');
+ const whyNot=textValue(s.why_not_buy,'No major X10 validation warning.');
+ const validations=Array.isArray(s.validation)?s.validation:(String(s.validation||'').split(/[;,|]/).map(function(x){return x.trim()}).filter(Boolean));
+ const reasons=Array.isArray(s.early_momentum_reasons)?s.early_momentum_reasons:[];
+ const stage=textValue(s.momentum_stage,'WATCH');
+ const setup=textValue(s.setup_quality,'—');
+ const signal=textValue(s.signal,'WATCH');
+ const dontChase=!!s.dont_chase||signal.toUpperCase().includes("DON'T CHASE")||signal.toUpperCase().includes('WAIT');
+ const technical=[['TREND',textValue(s.trend)],['MOMENTUM',textValue(s.momentum)],['RSI',num(s.rsi)],['MACD',num(s.macd)],['ADX',num(s.adx)],['VOLUME RATIO',num(s.volume_ratio)],['SUPPORT',money(s.support)],['RESISTANCE',money(s.resistance)],['ATR',num(s.atr)]];
+ const validationHtml=validations.length?validations.map(function(v){const warn=/WEAK|LOW|CHASE|AVOID|RISK/i.test(String(v));return '<span class="'+(warn?'warn':'')+'">'+esc(v)+'</span>'}).join(''):'<span>No extra validation flags</span>';
+ const reasonHtml=reasons.length?'<div class="az-dna-note">Momentum evidence: '+reasons.map(esc).join(' · ')+'</div>':'';
+ const html='<div class="az-dna-hero"><h3>🔬 X10 Stock DNA</h3><div class="az-dna-hero-row">'+
+  '<div class="az-dna-stat"><small>X10 SCORE</small><b class="orange">'+scoreValue(s.x10_score)+'/100</b></div>'+
+  '<div class="az-dna-stat"><small>EARLY MOMENTUM</small><b>'+scoreValue(s.early_momentum_score)+'/100</b></div>'+
+  '<div class="az-dna-stat"><small>LIFECYCLE STAGE</small><b>'+esc(stage)+'</b></div>'+
+  '<div class="az-dna-stat"><small>SETUP QUALITY</small><b class="'+(setup==='GOOD'?'green':setup==='WEAK'?'red':'orange')+'">'+esc(setup)+'</b></div>'+
+  '</div><div class="az-validation">'+validationHtml+'</div>'+reasonHtml+'</div>'+
+  '<div class="az-reason-grid"><div class="az-reason good"><h3>✅ Why Buy</h3><p>'+esc(whyBuy)+'</p></div><div class="az-reason bad"><h3>⚠ Why Not Buy</h3><p>'+esc(whyNot)+'</p></div></div>'+
+  '<div class="az-info-card"><h3>🎯 Decision Snapshot</h3><div class="az-dna-tech">'+
+  '<div class="az-metric"><small>SIGNAL</small><b class="'+cls(signal)+'">'+esc(signal)+'</b></div>'+
+  '<div class="az-metric"><small>R:R</small><b>'+esc(ratioValue(s))+'</b></div>'+
+  '<div class="az-metric"><small>CHASE STATUS</small><b class="'+(dontChase?'red':'green')+'">'+(dontChase?'DON’T CHASE':'ACTIONABLE ZONE')+'</b></div>'+
+  '</div></div>'+
+  '<div class="az-info-card"><h3>📊 Technical DNA</h3><div class="az-dna-tech">'+technical.map(function(x){return '<div class="az-metric"><small>'+esc(x[0])+'</small><b>'+esc(x[1])+'</b></div>'}).join('')+'</div><div class="az-dna-note">Stock DNA summarizes the current X10 decision-support output. It does not guarantee a future price move.</div></div>';
+ const target=document.getElementById('azDna');if(target)target.innerHTML=html;
+};
+})();</script>'''
+    html = html.replace("</body>", guard_js + step3_js + "</body>")
     return html
 
 @app.route("/api/analyze/<symbol>")
@@ -313,4 +354,4 @@ def instrument_endpoint(symbol):
         stock = instrument_manager.find_stock(symbol)
         if not stock: return jsonify({"success": False, "message": "Stock not found."}), 404
         return jsonify({"success": True, "stock": stock})
-    except Exception as error: return jsonify({"success": False, "message": str(error)}), 404
+    except Exception as error: return jsonify({"success": False, "message": str(error), "stocks": []}), 404
