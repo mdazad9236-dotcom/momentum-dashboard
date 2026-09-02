@@ -1,0 +1,45 @@
+name: Patch chart workspace
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: "!contains(github.event.head_commit.message, 'chart workspace patch')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch chart workspace
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app.py')
+          s = p.read_text()
+          marker = '    html = html.replace("</body>", guard_js + step3_js + broker_ui_js + step2_js + "</body>")'
+          if 'chart_workspace_js' not in s:
+              chart_workspace_js = r'''<style>
+.az-chart-toolbar{position:relative!important}.az-tool-group{display:flex;gap:5px;align-items:center;flex-wrap:wrap}.az-tool{min-width:34px}.az-tool.active{background:rgba(255,122,24,.18)!important;border-color:rgba(255,122,24,.65)!important;color:#fff!important}.az-tool-sep{width:1px;height:22px;background:#29445d;margin:0 2px}.az-chart-wrap{min-height:360px!important}.az-chart-tools-note{font-size:8px;color:#71879b;margin-left:4px}.az-tv-attribution{position:absolute;right:7px;bottom:6px;z-index:3;font-size:8px;color:#71879b;background:rgba(7,17,31,.72);padding:3px 5px;border-radius:5px}
+</style><script>(function(){
+let activeTool='cursor', drawingItems=[], drawingStart=null;
+function addTools(){const bar=document.querySelector('#azPanelChart .az-chart-toolbar');if(!bar||document.getElementById('azDrawingTools'))return;const group=document.createElement('span');group.id='azDrawingTools';group.className='az-tool-group';group.innerHTML='<span class="az-tool-sep"></span><button class="az-tool active" data-tool="cursor">↖</button><button class="az-tool" data-tool="hline">H</button><button class="az-tool" data-tool="trend">╱</button><button class="az-tool" data-tool="ray">→</button><button class="az-tool" data-tool="rect">□</button><button class="az-tool" data-tool="fib">Fib</button><button class="az-tool" data-tool="measure">↕</button><button class="az-tool" data-tool="text">T</button><button class="az-tool" id="azClearDrawings">Clear</button><span class="az-chart-tools-note">Draw on chart</span>';bar.insertBefore(group,bar.querySelector('#azFullscreen'));group.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>{activeTool=b.dataset.tool;group.querySelectorAll('[data-tool]').forEach(x=>x.classList.toggle('active',x.dataset.tool===activeTool));if(activeTool==='cursor')drawingStart=null});group.querySelector('#azClearDrawings').onclick=()=>{drawingItems=[];drawingStart=null;drawAdvancedChart()};}
+function ensureAttribution(){const wrap=document.getElementById('azChartWrap');if(!wrap||wrap.querySelector('.az-tv-attribution'))return;const a=document.createElement('a');a.className='az-tv-attribution';a.href='https://www.tradingview.com/lightweight-charts/';a.target='_blank';a.rel='noopener';a.textContent='Charting by TradingView Lightweight Charts';wrap.appendChild(a)}
+const originalDraw=window.drawAdvancedChart;
+window.drawAdvancedChart=function(){if(typeof originalDraw==='function')originalDraw();addTools();ensureAttribution();drawUserTools()};
+function drawUserTools(){const c=document.getElementById('azCanvas');if(!c||!drawingItems.length)return;const ctx=c.getContext('2d');const r=c.getBoundingClientRect();const w=r.width,h=r.height;const pad={l:60,r:22,t:44,b:78};const data=currentCandles.slice(chartState.start,chartState.end);if(!data.length)return;const max=Math.max(...data.map(x=>x.h)),min=Math.min(...data.map(x=>x.l)),span=max-min||1,priceH=Math.max(120,h-pad.t-pad.b-87);const py=p=>pad.t+(max-p)/span*priceH;const xFor=idx=>pad.l+((idx-chartState.start)+.5)*((w-pad.l-pad.r)/data.length);ctx.save();ctx.lineWidth=1.5;drawingItems.forEach(d=>{ctx.strokeStyle='#ffb06f';ctx.fillStyle='rgba(255,176,111,.10)';ctx.setLineDash(d.type==='hline'||d.type==='ray'?[6,4]:[]);if(d.type==='hline'){const y=py(d.price);ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();ctx.fillStyle='#ffb06f';ctx.font='9px Arial';ctx.fillText('H '+money(d.price),w-pad.r-82,y-4)}else if(d.type==='trend'||d.type==='ray'){const x1=xFor(d.i1),y1=py(d.p1),x2=xFor(d.i2),y2=py(d.p2);let ex=x2,ey=y2;if(d.type==='ray'){const dx=x2-x1,dy=y2-y1;ex=w-pad.r;ey=y1+(ex-x1)*(dy/(dx||1))}ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(ex,ey);ctx.stroke()}else if(d.type==='rect'){const x1=xFor(d.i1),x2=xFor(d.i2),y1=py(d.p1),y2=py(d.p2);ctx.fillRect(Math.min(x1,x2),Math.min(y1,y2),Math.abs(x2-x1),Math.abs(y2-y1));ctx.strokeRect(Math.min(x1,x2),Math.min(y1,y2),Math.abs(x2-x1),Math.abs(y2-y1))}else if(d.type==='fib'){const x1=xFor(d.i1),x2=xFor(d.i2),top=Math.max(d.p1,d.p2),bot=Math.min(d.p1,d.p2);[0,.236,.382,.5,.618,.786,1].forEach(function(f){const p=bot+(top-bot)*f,y=py(p);ctx.setLineDash([3,4]);ctx.beginPath();ctx.moveTo(Math.min(x1,x2),y);ctx.lineTo(Math.max(x1,x2),y);ctx.stroke();ctx.setLineDash([]);ctx.font='8px Arial';ctx.fillText((f*100).toFixed(1)+'% '+money(p),Math.min(x1,x2)+4,y-3)})}else if(d.type==='measure'){const x1=xFor(d.i1),x2=xFor(d.i2),y1=py(d.p1),y2=py(d.p2);ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.font='9px Arial';ctx.fillText((d.p2-d.p1>=0?'+':'')+num(d.p2-d.p1),Math.min(x1,x2)+5,Math.min(y1,y2)-5)}else if(d.type==='text'){const x=xFor(d.i1),y=py(d.p1);ctx.setLineDash([]);ctx.font='bold 10px Arial';ctx.fillText(d.text||'Note',x,y)} });ctx.restore();}
+function canvasPoint(e){const c=document.getElementById('azCanvas');const r=c.getBoundingClientRect();const w=r.width,h=r.height,pad={l:60,r:22,t:44,b:78};const data=currentCandles.slice(chartState.start,chartState.end);if(!data.length)return null;const step=(w-pad.l-pad.r)/data.length;const idx=Math.max(0,Math.min(data.length-1,Math.floor((e.clientX-r.left-pad.l)/Math.max(1,step))));const max=Math.max(...data.map(x=>x.h)),min=Math.min(...data.map(x=>x.l)),span=max-min||1,priceH=Math.max(120,h-pad.t-pad.b-87);const p=max-((e.clientY-r.top-pad.t)/priceH)*span;return{idx:chartState.start+idx,price:p}};
+function toolDown(e){if(activeTool==='cursor')return;const p=canvasPoint(e);if(!p)return;if(activeTool==='hline'){drawingItems.push({type:'hline',price:p.price});drawAdvancedChart();return}if(activeTool==='text'){const text=prompt('Chart note:','');if(text){drawingItems.push({type:'text',i1:p.idx,p1:p.price,text});drawAdvancedChart()}return}drawingStart=p;}
+function toolUp(e){if(!drawingStart||activeTool==='cursor'||activeTool==='hline'||activeTool==='text')return;const p=canvasPoint(e);if(!p)return;drawingItems.push({type:activeTool,i1:drawingStart.idx,p1:drawingStart.price,i2:p.idx,p2:p.price});drawingStart=null;drawAdvancedChart()}
+function bindCanvas(){const c=document.getElementById('azCanvas');if(!c||c.dataset.toolsBound)return;c.dataset.toolsBound='1';c.addEventListener('mousedown',toolDown);c.addEventListener('mouseup',toolUp)}
+const originalOpen=window.openInstrument;window.openInstrument=async function(s){drawingItems=[];drawingStart=null;const r=await originalOpen(s);setTimeout(bindCanvas,100);return r};
+setInterval(function(){addTools();bindCanvas()},500);
+})();</script>'''
+              s = s.replace(marker, marker.replace('step2_js + "</body>")', 'step2_js + chart_workspace_js + "</body>")'))
+          s = s.replace('definition["token"],\n            days=400,\n            interval="ONE_DAY"', 'definition["token"],\n            days=120,\n            interval="ONE_DAY"')
+          p.write_text(s)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.py
+          git diff --cached --quiet || git commit -m "ui: chart workspace patch"
+          git push
