@@ -48,9 +48,6 @@ class AngelOneService:
             if missing:
                 return {"success": False, "message": "Missing Angel One environment variables: " + ", ".join(missing)}
 
-            # Do not repeatedly hammer the login endpoint after a rate-limit
-            # response. A short retry is useful for transient gateway errors,
-            # while the shared-session check above prevents concurrent logins.
             last_error = None
             for attempt in range(1, 3):
                 try:
@@ -71,8 +68,6 @@ class AngelOneService:
                     message = (response or {}).get("message", "Angel One login failed.")
                     last_error = message
                     if "access denied" in str(message).lower() or "rate" in str(message).lower():
-                        # Rate limits are normally short-lived. Wait once rather
-                        # than issuing a burst of login attempts from workers.
                         if attempt < 2:
                             time.sleep(3)
                             continue
@@ -143,8 +138,13 @@ class AngelOneService:
         if not login_result.get("success"):
             return {"success": False, "message": login_result.get("message", "Angel One login failed."), "data": []}
         try:
+            # Keep interactive chart requests deliberately small. The dashboard
+            # only needs a compact working window, while large candle requests
+            # can trigger Angel One AB1021 rate limiting and make charts appear
+            # blank. The X10 calculations already use their own bounded windows.
+            requested_days = min(int(days), 120)
             to_date = datetime.now()
-            from_date = to_date - timedelta(days=min(int(days), 2000))
+            from_date = to_date - timedelta(days=requested_days)
             response = self.smart_api.getCandleData({"exchange": exchange, "symboltoken": str(token), "interval": interval, "fromdate": from_date.strftime("%Y-%m-%d %H:%M"), "todate": to_date.strftime("%Y-%m-%d %H:%M")})
             if not response or not response.get("status"):
                 return {"success": False, "message": (response or {}).get("message", "Historical data request failed."), "data": []}
