@@ -4,6 +4,7 @@ import time
 import requests
 from functools import wraps
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import unquote
 
 from flask import Flask, jsonify, render_template, request, redirect, url_for, session
 
@@ -11,6 +12,7 @@ from angel_instruments import AngelInstrumentManager
 from angel_service import AngelOneService
 from stock_service import StockService
 from angel_scanner import AngelScanner
+from market_indices import INDEX_DEFINITIONS
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "x10-marketai-session-key-change-me")
@@ -254,14 +256,7 @@ def logout():
 def home():
     html = render_template("index.html")
     html = html.replace("timer=setInterval(()=>{loadScan();loadIndices()},30000);", "timer=setInterval(()=>{loadScan();loadIndices()},60000);")
-    # Phase 4 Step 2: guard dashboard polling against duplicate in-flight requests
-    # and stop polling while the browser tab is hidden. The backend remains the
-    # source of truth and continues its own cached background refresh.
     guard_js = '''<script>(function(){\nconst originalLoadScan=window.loadScan,originalLoadIndices=window.loadIndices;\nlet scanBusy=false,indexBusy=false;\nwindow.loadScan=async function(){if(scanBusy||document.hidden)return;scanBusy=true;try{return await originalLoadScan()}finally{scanBusy=false}};\nwindow.loadIndices=async function(){if(indexBusy||document.hidden)return;indexBusy=true;try{return await originalLoadIndices()}finally{indexBusy=false}};\nif(window.timer)clearInterval(window.timer);\nwindow.timer=setInterval(function(){if(!document.hidden){window.loadScan();window.loadIndices()}},60000);\ndocument.addEventListener('visibilitychange',function(){if(!document.hidden){window.loadScan();window.loadIndices()}});\n})();</script>'''
-
-    # Phase 4 Step 3: make X10 decision intelligence visible inside Stock DNA.
-    # This only changes presentation. X10 scoring, ranking and trade-plan logic
-    # continue to come from the backend engine without modification.
     step3_js = '''<style>
 .az-dna-hero{padding:13px;border-radius:12px;background:linear-gradient(135deg,rgba(255,122,24,.13),rgba(72,167,255,.08));border:1px solid #29445d}.az-dna-hero-row{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:10px}.az-dna-stat{background:#081522;border:1px solid #183149;border-radius:8px;padding:9px}.az-dna-stat small{display:block;color:#71879b;font-size:8px}.az-dna-stat b{display:block;margin-top:4px;font-size:12px}.az-reason-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.az-reason{border-radius:10px;padding:11px;border:1px solid #20384f;background:#081522}.az-reason.good{border-color:rgba(32,209,139,.35);background:rgba(32,209,139,.06)}.az-reason.bad{border-color:rgba(255,93,108,.35);background:rgba(255,93,108,.06)}.az-reason h3{font-size:11px!important;margin:0 0 7px!important}.az-reason p{margin:0;color:#a9b9ca;font-size:10px;line-height:1.55}.az-validation{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}.az-validation span{padding:5px 7px;border-radius:999px;background:#091827;border:1px solid #29445d;color:#aebfd0;font-size:8px;font-weight:900}.az-validation .warn{color:#ff9aa3;border-color:rgba(255,93,108,.4)}.az-dna-tech{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.az-dna-tech .az-metric{border:1px solid #183149}.az-dna-note{margin-top:8px;color:#71879b;font-size:9px;line-height:1.45}@media(max-width:700px){.az-dna-hero-row,.az-dna-tech{grid-template-columns:repeat(2,1fr)}.az-reason-grid{grid-template-columns:1fr}}
 </style><script>(function(){
@@ -299,9 +294,6 @@ window.renderDNA=function(s){
  const target=document.getElementById('azDna');if(target)target.innerHTML=html;
 };
 })();</script>'''
-
-    # Phase 5 Step 1: broker-style visual shell. Presentation-only; no market
-    # data, X10 scoring, ranking, trade-plan or refresh behavior is changed.
     broker_ui_js = '''<style>
 :root{--az-glow:rgba(72,167,255,.16);--az-panel-2:#0a1827}
 body{background:radial-gradient(circle at 72% -15%,rgba(72,167,255,.16),transparent 34%),radial-gradient(circle at 12% 0%,rgba(255,122,24,.08),transparent 28%),#06101d}
@@ -324,8 +316,48 @@ nav a{border:1px solid transparent;transition:.18s ease}nav a:hover{border-color
 </style><script>(function(){
 const mark=document.createElement('div');mark.id='azMarketShellStatus';mark.innerHTML='<span class="az-shell-dot">●</span> X10 DECISION CENTER';mark.style.cssText='position:fixed;bottom:14px;right:16px;z-index:20;padding:7px 10px;border:1px solid #20384f;border-radius:999px;background:rgba(7,17,31,.88);backdrop-filter:blur(10px);color:#8397ab;font-size:9px;font-weight:900;letter-spacing:.5px;box-shadow:0 8px 25px rgba(0,0,0,.25)';document.body.appendChild(mark);
 })();</script>'''
-    html = html.replace("</body>", guard_js + step3_js + broker_ui_js + "</body>")
+    step2_js = '''<style>
+.az-index-pulse{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin-bottom:2px}.az-index-card{position:relative;padding:15px 16px!important;min-height:174px;overflow:hidden}.az-index-card:before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(72,167,255,.08),transparent 58%);pointer-events:none}.az-index-card.bull:before{background:linear-gradient(135deg,rgba(32,209,139,.11),transparent 58%)}.az-index-card.bear:before{background:linear-gradient(135deg,rgba(255,93,108,.11),transparent 58%)}.az-index-card.vix:before{background:linear-gradient(135deg,rgba(255,122,24,.1),transparent 58%)}.az-index-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.az-index-name{font-size:11px;color:#a9b9ca;font-weight:900;letter-spacing:.3px}.az-index-bias{font-size:8px;font-weight:950;padding:4px 7px;border-radius:999px;border:1px solid #29445d;background:#091827}.az-index-bias.bull{color:#20d18b;border-color:rgba(32,209,139,.35);background:rgba(32,209,139,.08)}.az-index-bias.bear{color:#ff5d6c;border-color:rgba(255,93,108,.35);background:rgba(255,93,108,.08)}.az-index-bias.neutral{color:#ffb06f;border-color:rgba(255,122,24,.3);background:rgba(255,122,24,.07)}.az-index-price{font-size:23px;font-weight:950;letter-spacing:-.5px;margin:11px 0 2px}.az-index-change{font-size:10px;font-weight:900}.az-index-levels{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:11px}.az-index-level{padding:6px 7px;border-radius:7px;background:rgba(4,12,22,.62);border:1px solid #183149}.az-index-level small{display:block;color:#71879b;font-size:7px}.az-index-level b{display:block;margin-top:3px;font-size:9px}.az-index-targets{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}.az-index-target{font-size:8px;color:#9db0c3;padding:4px 6px;border-radius:6px;background:#091827;border:1px solid #20384f}.az-index-target b{color:#20d18b}.az-index-open{margin-top:9px;font-size:8px;color:#48a7ff;font-weight:900}.az-index-banner{grid-column:1/-1;padding:10px 12px;border:1px solid #20384f;border-radius:11px;background:linear-gradient(90deg,rgba(72,167,255,.07),rgba(255,122,24,.06));display:flex;justify-content:space-between;align-items:center;gap:10px}.az-index-banner b{font-size:10px}.az-index-banner span{font-size:8px;color:#8397ab}.az-index-detail{margin-top:8px;color:#8397ab;font-size:8px;line-height:1.4}@media(max-width:1200px){.az-index-pulse{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:700px){.az-index-pulse{grid-template-columns:1fr}.az-index-banner{display:block}.az-index-banner span{display:block;margin-top:4px}}
+</style><script>(function(){
+function indexKey(name){return String(name||'').toUpperCase().trim()}
+function biasClass(b){const x=String(b||'NEUTRAL').toUpperCase();return x.includes('BULL')?'bull':x.includes('BEAR')?'bear':'neutral'}
+function indexMoney(v){return Number.isFinite(Number(v))?'₹'+Number(v).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}):'—'}
+function indexPct(v){const n=Number(v);return Number.isFinite(n)?(n>=0?'+':'')+n.toFixed(2)+'%':'—'}
+window.renderIndices=function(a){marketIndices=a||[];const b=document.getElementById('indicesBox');b.innerHTML='';if(!a.length){b.innerHTML='<div class="card empty">Market data is warming up in the background.</div>';return}const wrap=document.createElement('div');wrap.className='az-index-pulse';const banner=document.createElement('div');banner.className='az-index-banner';banner.innerHTML='<b>MARKET PULSE · ACTIONABLE INDEX MAP</b><span>Price → support / resistance → target zones · click any index for detailed analysis</span>';wrap.appendChild(banner);a.slice(0,4).forEach(i=>{const bias=biasClass(i.bias),tz=i.target_zones||{},dz=i.downside_zones||{};const d=document.createElement('div');d.className='card az-index-card '+bias+(indexKey(i.name)==='INDIA VIX'?' vix':'');d.onclick=()=>window.openInstrument({...i,isIndex:true,symbol:i.name,name:i.name});d.innerHTML='<div class="az-index-top"><div class="az-index-name">'+esc(i.name)+'</div><span class="az-index-bias '+bias+'">'+esc(i.bias||'NEUTRAL')+'</span></div><div class="az-index-price">'+indexMoney(i.price)+'</div><div class="az-index-change '+(Number(i.change)>=0?'green':'red')+'">'+(Number(i.change)>=0?'+':'')+num(i.change)+' · '+indexPct(i.change_percent)+'</div><div class="az-index-levels"><div class="az-index-level"><small>SUPPORT</small><b>'+indexMoney(i.support)+'</b></div><div class="az-index-level"><small>RESISTANCE</small><b>'+indexMoney(i.resistance)+'</b></div><div class="az-index-level"><small>ENTRY ZONE</small><b>'+indexMoney((i.entry_zone||{}).low)+' – '+indexMoney((i.entry_zone||{}).high)+'</b></div></div><div class="az-index-targets"><span class="az-index-target">T1 <b>'+indexMoney(tz.target_1)+'</b></span><span class="az-index-target">T2 <b>'+indexMoney(tz.target_2)+'</b></span><span class="az-index-target">T3 <b>'+indexMoney(tz.target_3)+'</b></span></div><div class="az-index-detail">Downside zones: '+indexMoney(dz.support_1)+' / '+indexMoney(dz.support_2)+'</div><div class="az-index-open">▣ OPEN INDEX ANALYSIS · HEIKIN-ASHI · LEVELS</div>';wrap.appendChild(d)});b.appendChild(wrap)};
+const originalOpenInstrument=window.openInstrument;
+window.openInstrument=async function(raw){const s=raw||{};if(!s.isIndex)return originalOpenInstrument(s);currentInstrument=s;document.getElementById('azModal').classList.add('open');document.getElementById('azModal').setAttribute('aria-hidden','false');document.body.style.overflow='hidden';document.getElementById('azTitle').textContent=s.name||s.symbol||'Market Index';document.getElementById('azSubtitle').textContent=(s.name||s.symbol||'')+' · Angel One · INDEX';document.getElementById('azChartWrap').innerHTML='<div class="az-loading">Loading index candles…</div>';document.getElementById('azChartStatus').textContent='Loading index data…';renderDNA(s);renderTrade(s);switchTab('chart');try{const name=encodeURIComponent(s.name||s.symbol);const r=await fetch('/api/index-historical/'+name,{cache:'no-store'});const j=await r.json();if(!r.ok||!j.success)throw new Error(j.message||'Index historical data unavailable.');const rawCandles=(j.data||[]).map(parseCandle).filter(x=>[x.o,x.h,x.l,x.c].every(Number.isFinite));currentCandles=toHeikinAshi(rawCandles);if(!currentCandles.length)throw new Error('No index candles returned.');chartState={start:Math.max(0,currentCandles.length-45),end:currentCandles.length,baseStart:Math.max(0,currentCandles.length-45),baseEnd:currentCandles.length};document.getElementById('azChartStatus').textContent='Angel One · Heikin-Ashi · '+currentCandles.length+' daily candles · '+(s.name||s.symbol);document.getElementById('azChartWrap').innerHTML='<div class="az-chart-overlay" id="azOverlay"></div><canvas class="az-canvas" id="azCanvas"></canvas>';document.getElementById('azCanvas').addEventListener('wheel',chartWheel,{passive:false});document.getElementById('azCanvas').addEventListener('mousedown',chartDown);document.getElementById('azCanvas').addEventListener('dblclick',()=>resetChart());drawAdvancedChart();window.addEventListener('resize',drawAdvancedChart,{passive:true});}catch(e){document.getElementById('azChartWrap').innerHTML='<div class="az-error">Index chart error<br>'+esc(e.message||e)+'</div>';document.getElementById('azChartStatus').textContent='Index chart unavailable'}};
+function toHeikinAshi(candles){let prevO=0,prevC=0;return candles.map(function(d,i){const c=(d.o+d.h+d.l+d.c)/4;const o=i===0?(d.o+d.c)/2:(prevO+prevC)/2;const h=Math.max(d.h,o,c);const l=Math.min(d.l,o,c);prevO=o;prevC=c;return{t:d.t,o,h,l,c,v:d.v}})}
+const originalIndexDNA=window.renderDNA;window.renderDNA=function(s){if(!s||!s.isIndex)return originalIndexDNA(s);const tz=s.target_zones||{},dz=s.downside_zones||{},ez=s.entry_zone||{};document.getElementById('azDna').innerHTML='<div class="az-info-card"><h3>🧭 Index Structure</h3><div class="az-metric-grid"><div class="az-metric"><small>BIAS</small><b class="'+cls(s.bias)+'">'+esc(s.bias||'NEUTRAL')+'</b></div><div class="az-metric"><small>CURRENT</small><b>'+indexMoney(s.price)+'</b></div><div class="az-metric"><small>CHANGE</small><b class="'+(Number(s.change)>=0?'green':'red')+'">'+(Number(s.change)>=0?'+':'')+num(s.change)+' ('+indexPct(s.change_percent)+')</b></div><div class="az-metric"><small>SUPPORT</small><b>'+indexMoney(s.support)+'</b></div><div class="az-metric"><small>RESISTANCE</small><b>'+indexMoney(s.resistance)+'</b></div><div class="az-metric"><small>ENTRY ZONE</small><b>'+indexMoney(ez.low)+' – '+indexMoney(ez.high)+'</b></div></div></div><div class="az-info-card"><h3>🎯 Target Map</h3><div class="az-trade-grid"><div class="az-trade-item"><small>TARGET 1</small><b class="green">'+indexMoney(tz.target_1)+'</b></div><div class="az-trade-item"><small>TARGET 2</small><b class="green">'+indexMoney(tz.target_2)+'</b></div><div class="az-trade-item"><small>TARGET 3</small><b class="green">'+indexMoney(tz.target_3)+'</b></div><div class="az-trade-item"><small>SUPPORT 1</small><b>'+indexMoney(dz.support_1)+'</b></div><div class="az-trade-item"><small>SUPPORT 2</small><b>'+indexMoney(dz.support_2)+'</b></div><div class="az-trade-item"><small>RANGE</small><b>'+indexMoney(s.support)+' → '+indexMoney(s.resistance)+'</b></div></div></div><div class="az-info-card"><h3>📌 Market Read</h3><p class="az-summary">'+esc(s.bias||'NEUTRAL')+' bias is derived from current price structure, support/resistance position and daily change. These are decision-support zones, not guaranteed targets.</p></div>'};
+const originalIndexTrade=window.renderTrade;window.renderTrade=function(s){if(!s||!s.isIndex)return originalIndexTrade(s);const p=Number(s.price),sup=Number(s.support),res=Number(s.resistance),bias=String(s.bias||'NEUTRAL');const upside=Number.isFinite(p)&&Number.isFinite(res)&&p?((res-p)/p*100):NaN;const downside=Number.isFinite(p)&&Number.isFinite(sup)&&p?((p-sup)/p*100):NaN;document.getElementById('azTrade').innerHTML='<div class="az-info-card"><h3>🎯 Index Decision Plan</h3><div class="az-trade-grid"><div class="az-trade-item"><small>BIAS</small><b class="'+cls(bias)+'">'+esc(bias)+'</b></div><div class="az-trade-item"><small>CURRENT</small><b>'+indexMoney(p)+'</b></div><div class="az-trade-item"><small>SUPPORT</small><b>'+indexMoney(sup)+'</b></div><div class="az-trade-item"><small>RESISTANCE</small><b>'+indexMoney(res)+'</b></div><div class="az-trade-item"><small>UPSIDE TO R</small><b>'+ (Number.isFinite(upside)?upside.toFixed(2)+'%':'—') +'</b></div><div class="az-trade-item"><small>DOWNSIDE TO S</small><b>'+ (Number.isFinite(downside)?downside.toFixed(2)+'%':'—') +'</b></div></div><p class="az-summary">Use the support/resistance and target zones as a map. Wait for confirmation near the planned zone and avoid chasing extended moves.</p></div>'};
+})();</script>'''
+    html = html.replace("</body>", guard_js + step3_js + broker_ui_js + step2_js + "</body>")
     return html
+
+@app.route("/api/index-historical/<path:name>")
+@login_required
+def index_historical(name):
+    try:
+        key = unquote(name).upper().strip()
+        definition = INDEX_DEFINITIONS.get(key)
+        if not definition:
+            for index_name in INDEX_DEFINITIONS:
+                if index_name.upper() == key:
+                    definition = INDEX_DEFINITIONS[index_name]
+                    key = index_name
+                    break
+        if not definition:
+            return jsonify({"success": False, "message": f"Index not found: {name}", "data": []}), 404
+        result = angel_service.get_historical_data(
+            definition["tradingsymbol"],
+            definition["token"],
+            days=400,
+            interval="ONE_DAY",
+            exchange=definition.get("exchange", "NSE"),
+        )
+        return jsonify(result), (200 if result.get("success") else 502)
+    except Exception as error:
+        print("INDEX HISTORICAL API ERROR:", error)
+        return jsonify({"success": False, "message": str(error), "data": []}), 500
 
 @app.route("/api/analyze/<symbol>")
 @login_required
