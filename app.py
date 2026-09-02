@@ -354,4 +354,4 @@ def instrument_endpoint(symbol):
         stock = instrument_manager.find_stock(symbol)
         if not stock: return jsonify({"success": False, "message": "Stock not found."}), 404
         return jsonify({"success": True, "stock": stock})
-    except Exception as error: return jsonify({"success": False, "message": str(error), "stocks": []}), 404
+    except Exception as error: return jsonify({"success": False, "message": str(error)}), 404
