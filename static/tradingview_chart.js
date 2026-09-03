@@ -1,4 +1,4 @@
-/* TradingView Advanced Chart: embedded inside the existing analysis modal for stocks + indices. */
+/* TradingView Advanced Chart: chart-only workspace inside the existing analysis modal. */
 (function () {
   function symbolForInstrument(s) {
     const raw = String((s && (s.symbol || s.name)) || '').trim().toUpperCase();
@@ -25,11 +25,11 @@
     wrap.innerHTML = '';
     const host = document.createElement('div');
     host.className = 'tradingview-widget-container';
-    host.style.cssText = 'height:100%;width:100%;';
+    host.style.cssText = 'height:100%;width:100%;min-height:0;';
 
     const widget = document.createElement('div');
     widget.className = 'tradingview-widget-container__widget';
-    widget.style.cssText = 'height:100%;width:100%;';
+    widget.style.cssText = 'height:100%;width:100%;min-height:0;';
     host.appendChild(widget);
     wrap.appendChild(host);
 
@@ -37,7 +37,7 @@
     script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
     script.async = true;
     script.type = 'text/javascript';
-    script.text = JSON.stringify({
+    script.innerHTML = JSON.stringify({
       autosize: true,
       width: '100%',
       height: '100%',
@@ -50,6 +50,7 @@
       withdateranges: true,
       hide_side_toolbar: false,
       allow_symbol_change: true,
+      show_popup_button: false,
       save_image: false,
       calendar: false,
       support_host: 'https://www.tradingview.com',
@@ -58,9 +59,9 @@
     host.appendChild(script);
 
     const status = document.getElementById('azChartStatus');
-    if (status) status.textContent = 'TradingView · ' + symbol + ' · Embedded';
+    if (status) status.textContent = 'TradingView · ' + symbol + ' · Embedded chart';
     const hint = document.getElementById('azChartHint');
-    if (hint) hint.textContent = 'Embedded TradingView Advanced Chart · drawing tools, indicators, timeframes, volume, zoom and pan are available. X10 levels remain in the decision panel.';
+    if (hint) hint.textContent = 'Chart tools only: drawing tools, indicators, timeframes, volume, crosshair, zoom, pan and fullscreen. Angel One remains the source for all analysis and X10 decisions.';
   }
 
   function install() {
@@ -70,26 +71,32 @@
     const modal = document.getElementById('azModal');
     if (!modal) return false;
 
-    window.__azTradingViewOriginalOpenInstrument = window.openInstrument;
+    const originalOpenInstrument = window.openInstrument;
+    window.__azTradingViewOriginalOpenInstrument = originalOpenInstrument;
+
     window.openInstrument = function (raw) {
-      const s = raw || {};
-      window.currentInstrument = s;
+      const instrument = raw || {};
+      const symbol = symbolForInstrument(instrument);
 
-      modal.classList.add('open');
-      modal.setAttribute('aria-hidden', 'false');
-      document.body.style.overflow = 'hidden';
+      // Preserve the existing Angel One/X10 analysis flow first.
+      let result;
+      try {
+        result = originalOpenInstrument(instrument);
+      } catch (err) {
+        console.error('Original instrument analysis failed:', err);
+      }
 
-      const title = document.getElementById('azTitle');
-      const subtitle = document.getElementById('azSubtitle');
-      if (title) title.textContent = s.name || s.symbol || 'Market Instrument';
-      if (subtitle) subtitle.textContent = (s.symbol || s.name || '') + ' · TradingView' + (s.isIndex ? ' · INDEX' : ' · X10');
+      return Promise.resolve(result).then(function () {
+        // Keep the existing modal and analysis UI; only replace its chart surface.
+        if (!modal.classList.contains('open')) {
+          modal.classList.add('open');
+          modal.setAttribute('aria-hidden', 'false');
+          document.body.style.overflow = 'hidden';
+        }
 
-      if (typeof window.renderDNA === 'function') window.renderDNA(s);
-      if (typeof window.renderTrade === 'function') window.renderTrade(s);
-      if (typeof window.switchTab === 'function') window.switchTab('chart');
-
-      mount(symbolForInstrument(s));
-      return Promise.resolve();
+        if (typeof window.switchTab === 'function') window.switchTab('chart');
+        mount(symbol);
+      });
     };
 
     window.__azTradingViewInstalled = true;
