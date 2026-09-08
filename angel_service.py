@@ -1,6 +1,7 @@
 import os
 import threading
 import time
+import sys
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -25,6 +26,17 @@ class AngelOneService:
         self.totp_secret = os.getenv("ANGEL_TOTP_SECRET")
         self.smart_api = None
         self.logged_in = False
+        # app.py creates the Flask application before instantiating this service.
+        # Register the multimodal Chart AI endpoint at that point without exposing
+        # any provider key to the browser.
+        try:
+            app_module = sys.modules.get("app")
+            flask_app = getattr(app_module, "app", None)
+            if flask_app is not None:
+                from chart_ai import register_chart_ai_routes
+                register_chart_ai_routes(flask_app)
+        except Exception as error:
+            print("CHART AI ROUTE REGISTRATION WARNING:", error)
 
     def login(self):
         with AngelOneService._session_lock:
