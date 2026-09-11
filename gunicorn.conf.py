@@ -1,8 +1,7 @@
 """Gunicorn configuration for Azad AI Plus.
 
-Keep this file limited to normal Gunicorn settings. Flask routes belong in
-app.py; the only runtime hook below adjusts Jinja's comment delimiter because
-the static dashboard CSS contains selectors beginning with `{#`.
+Keep this file limited to normal Gunicorn settings and startup hooks. Flask
+routes remain in app.py/modules loaded after the application exists.
 """
 
 bind = "0.0.0.0:10000"
@@ -14,7 +13,15 @@ keepalive = 5
 
 
 def post_worker_init(worker):
-    """Prevent Jinja from treating CSS `{#id}` selectors as comments."""
+    """Apply startup hooks after the Flask app is loaded."""
     app_module = __import__("app")
     flask_app = app_module.app
-    flask_app.jinja_env.comment_start_string = "{##"
+    flask_app.jinja_env.comment_start_string = "{##}"
+
+    # Phase 1: register the stable core/API contract, diagnostics and bounded
+    # per-stock cache after the application and its services are initialized.
+    try:
+        from phase1_core import register_phase1_routes
+        register_phase1_routes(flask_app)
+    except Exception as error:
+        print("PHASE 1 ROUTE REGISTRATION WARNING:", error)
