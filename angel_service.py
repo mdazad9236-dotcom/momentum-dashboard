@@ -35,8 +35,10 @@ class AngelOneService:
             if flask_app is not None:
                 from chart_ai import register_chart_ai_routes
                 register_chart_ai_routes(flask_app)
+                from phase1_core import register_phase1_routes
+                register_phase1_routes(flask_app)
         except Exception as error:
-            print("CHART AI ROUTE REGISTRATION WARNING:", error)
+            print("STARTUP ROUTE REGISTRATION WARNING:", error)
 
     def login(self):
         with AngelOneService._session_lock:
