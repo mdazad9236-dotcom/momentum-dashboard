@@ -8,7 +8,10 @@ import time
 import requests
 from flask import jsonify
 
-YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+YAHOO_CHART_HOSTS = (
+    "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+    "https://query2.finance.yahoo.com/v8/finance/chart/{symbol}",
+)
 YAHOO_TIMEOUT = (5, 15)
 
 
@@ -25,52 +28,59 @@ def _number(value, default=None):
         return default
 
 
+def _parse_yahoo(payload, clean):
+    chart = payload.get("chart") or {}
+    result = (chart.get("result") or [None])[0]
+    if not isinstance(result, dict):
+        error = (chart.get("error") or {}).get("description", "Yahoo returned no chart result.")
+        return None, str(error)
+    timestamps = result.get("timestamp") or []
+    quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
+    opens, highs = quote.get("open") or [], quote.get("high") or []
+    lows, closes = quote.get("low") or [], quote.get("close") or []
+    volumes = quote.get("volume") or []
+    rows = []
+    for i, epoch in enumerate(timestamps):
+        if i >= len(opens) or i >= len(highs) or i >= len(lows) or i >= len(closes):
+            continue
+        o, h = _number(opens[i]), _number(highs[i])
+        low, c = _number(lows[i]), _number(closes[i])
+        v = _number(volumes[i] if i < len(volumes) else 0, 0)
+        if None in (o, h, low, c):
+            continue
+        rows.append([int(epoch), o, h, low, c, v or 0])
+    if not rows:
+        return None, f"Yahoo returned no usable candles for {clean}."
+    return rows, ""
+
+
 def fetch_yahoo_chart(symbol, period="1y", interval="1d"):
-    """Fetch Yahoo's public chart endpoint directly, avoiding yfinance dependencies."""
+    """Fetch Yahoo's public chart endpoint directly, trying both Yahoo API hosts."""
     clean = _clean_symbol(symbol)
     if not clean:
         return {"success": False, "message": "Stock symbol is required.", "data": []}
-    url = YAHOO_CHART_URL.format(symbol=f"{clean}.NS")
     params = {"range": period, "interval": interval, "events": "history", "includeAdjustedClose": "true"}
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36",
         "Accept": "application/json,text/plain,*/*",
     }
-    last_error = None
-    for attempt in range(2):
-        try:
-            response = requests.get(url, params=params, headers=headers, timeout=YAHOO_TIMEOUT)
-            response.raise_for_status()
-            payload = response.json()
-            chart = payload.get("chart") or {}
-            result = (chart.get("result") or [None])[0]
-            if not isinstance(result, dict):
-                error = (chart.get("error") or {}).get("description", "Yahoo returned no chart result.")
-                return {"success": False, "message": str(error), "data": []}
-            timestamps = result.get("timestamp") or []
-            quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
-            opens = quote.get("open") or []
-            highs = quote.get("high") or []
-            lows = quote.get("low") or []
-            closes = quote.get("close") or []
-            volumes = quote.get("volume") or []
-            rows = []
-            for i, epoch in enumerate(timestamps):
-                if i >= len(opens) or i >= len(highs) or i >= len(lows) or i >= len(closes):
-                    continue
-                o, h, low, c = _number(opens[i]), _number(highs[i]), _number(lows[i]), _number(closes[i])
-                v = _number(volumes[i] if i < len(volumes) else 0, 0)
-                if None in (o, h, low, c):
-                    continue
-                rows.append([int(epoch), o, h, low, c, v or 0])
-            if rows:
-                return {"success": True, "symbol": clean, "interval": "ONE_DAY", "count": len(rows), "data": rows, "data_source": "YAHOO CHART API", "message": ""}
-            return {"success": False, "message": f"Yahoo returned no usable candles for {clean}.", "data": []}
-        except Exception as error:
-            last_error = error
-            if attempt == 0:
-                time.sleep(0.4)
-    return {"success": False, "message": f"Yahoo chart fallback failed: {last_error}", "data": []}
+    errors = []
+    for host in YAHOO_CHART_HOSTS:
+        url = host.format(symbol=f"{clean}.NS")
+        for attempt in range(2):
+            try:
+                response = requests.get(url, params=params, headers=headers, timeout=YAHOO_TIMEOUT)
+                response.raise_for_status()
+                rows, parse_error = _parse_yahoo(response.json(), clean)
+                if rows:
+                    return {"success": True, "symbol": clean, "interval": "ONE_DAY", "count": len(rows), "data": rows, "data_source": "YAHOO CHART API", "message": ""}
+                errors.append(f"{url.split('/')[2]}: {parse_error}")
+                break
+            except Exception as error:
+                errors.append(f"{url.split('/')[2]}: {error}")
+                if attempt == 0:
+                    time.sleep(0.4)
+    return {"success": False, "message": "Yahoo chart fallback unavailable. " + " | ".join(errors[-4:]), "data": []}
 
 
 def register_chart_resilience(flask_app) -> None:
@@ -94,7 +104,7 @@ def install_fetch_resilience_script(flask_app, response):
         body = response.get_data(as_text=True)
         if "/static/chart_resilience.js" in body or "</body>" not in body:
             return response
-        response.set_data(body.replace("</body>", '<script src="/static/chart_resilience.js?v=2" defer></script></body>'))
+        response.set_data(body.replace("</body>", '<script src="/static/chart_resilience.js?v=3" defer></script></body>'))
     except Exception as error:
         print("CHART RESILIENCE HTML INJECTION WARNING:", error)
     return response
