@@ -27,8 +27,8 @@ class AngelOneService:
         self.smart_api = None
         self.logged_in = False
         # app.py creates the Flask application before instantiating this service.
-        # Register the multimodal Chart AI endpoint at that point without exposing
-        # any provider key to the browser.
+        # Register Chart AI, Phase 1, and chart resilience at that point without
+        # exposing any provider key to the browser.
         try:
             app_module = sys.modules.get("app")
             flask_app = getattr(app_module, "app", None)
@@ -37,6 +37,11 @@ class AngelOneService:
                 register_chart_ai_routes(flask_app)
                 from phase1_core import register_phase1_routes
                 register_phase1_routes(flask_app)
+                from chart_resilience import register_chart_resilience, install_fetch_resilience_script
+                register_chart_resilience(flask_app)
+                if not flask_app.config.get("X10_CHART_RESILIENCE_HTML_HOOK"):
+                    flask_app.config["X10_CHART_RESILIENCE_HTML_HOOK"] = True
+                    flask_app.after_request(lambda response: install_fetch_resilience_script(flask_app, response))
         except Exception as error:
             print("STARTUP ROUTE REGISTRATION WARNING:", error)
 
