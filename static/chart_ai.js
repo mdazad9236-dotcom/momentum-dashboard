@@ -5,6 +5,11 @@
   function current(){return window.__azP4Current || window.currentInstrument || {};}
   function esc(s){return String(s||'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));}
 
+  function loadPhase2(){
+    if(document.querySelector('script[src="/static/phase2_dashboard.js"]'))return;
+    const s=document.createElement('script');s.src='/static/phase2_dashboard.js';s.defer=true;document.body.appendChild(s);
+  }
+
   function inject(){
     const toolbar=document.querySelector('.az-chart-toolbar');
     const wrap=document.getElementById('azChartWrap');
@@ -86,8 +91,8 @@
   }
 
   function boot(){
+    loadPhase2();
     if(!inject()){setTimeout(boot,300);return;}
-    // Give the selected instrument hook and chart mount a moment to settle.
     setTimeout(()=>analyze(false),700);
   }
 
