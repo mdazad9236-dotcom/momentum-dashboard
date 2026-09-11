@@ -120,6 +120,10 @@ def clear_phase1_cache() -> None:
         _STOCK_CACHE.clear()
 
 
+def _auth_required(app_module) -> bool:
+    return bool(getattr(app_module, "is_authenticated", lambda: False)())
+
+
 def _analyze_stock(symbol: str, app_module) -> dict:
     clean = symbol.upper().strip().replace(".NS", "").replace(".BO", "")
     cached = _get_cached(clean)
@@ -169,10 +173,7 @@ def _diagnostics(app_module) -> dict:
 
     required_env = ("ANGEL_API_KEY", "ANGEL_CLIENT_CODE", "ANGEL_PASSWORD", "ANGEL_TOTP_SECRET")
     missing = [name for name in required_env if not os.getenv(name)]
-    checks["angel_one_config"] = {
-        "status": "OK" if not missing else "DEGRADED",
-        "missing": missing,
-    }
+    checks["angel_one_config"] = {"status": "OK" if not missing else "DEGRADED", "missing": missing}
 
     try:
         from angel_service import AngelOneService
@@ -211,12 +212,7 @@ def _diagnostics(app_module) -> dict:
 
     statuses = [item.get("status") for item in checks.values()]
     overall = "OK" if all(s in ("OK", "IDLE") for s in statuses) else "DEGRADED"
-    return {
-        "contract_version": "phase1.v1",
-        "status": overall,
-        "generated_at": now,
-        "checks": checks,
-    }
+    return {"contract_version": "phase1.v1", "status": overall, "generated_at": now, "checks": checks}
 
 
 def register_phase1_routes(flask_app) -> None:
@@ -225,10 +221,15 @@ def register_phase1_routes(flask_app) -> None:
         return
     flask_app.config["X10_PHASE1_REGISTERED"] = True
 
+    def authenticated_module():
+        return importlib.import_module("app")
+
     @flask_app.route("/api/v1/system/health")
     def phase1_health():
+        app_module = authenticated_module()
+        if not _auth_required(app_module):
+            return jsonify({"success": False, "authenticated": False, "message": "Authentication required."}), 401
         try:
-            app_module = importlib.import_module("app")
             payload = _diagnostics(app_module)
             code = 200 if payload["status"] != "ERROR" else 503
             return jsonify({"success": True, **payload}), code
@@ -237,22 +238,21 @@ def register_phase1_routes(flask_app) -> None:
 
     @flask_app.route("/api/v1/market/snapshot")
     def phase1_snapshot():
+        app_module = authenticated_module()
+        if not _auth_required(app_module):
+            return jsonify({"success": False, "authenticated": False, "message": "Authentication required."}), 401
         try:
-            app_module = importlib.import_module("app")
             payload = app_module._snapshot_response()
-            return jsonify({
-                "success": True,
-                "contract_version": "phase1.v1",
-                "snapshot": payload,
-                "generated_at": time.time(),
-            })
+            return jsonify({"success": True, "contract_version": "phase1.v1", "snapshot": payload, "generated_at": time.time()})
         except Exception as error:
             return jsonify({"success": False, "contract_version": "phase1.v1", "message": str(error)}), 500
 
     @flask_app.route("/api/v1/stock/<path:symbol>")
     def phase1_stock(symbol):
+        app_module = authenticated_module()
+        if not _auth_required(app_module):
+            return jsonify({"success": False, "authenticated": False, "message": "Authentication required."}), 401
         try:
-            app_module = importlib.import_module("app")
             payload = _analyze_stock(symbol, app_module)
             return jsonify({"success": True, **payload})
         except LookupError as error:
@@ -262,5 +262,8 @@ def register_phase1_routes(flask_app) -> None:
 
     @flask_app.route("/api/v1/core/cache/clear", methods=["POST"])
     def phase1_cache_clear():
+        app_module = authenticated_module()
+        if not _auth_required(app_module):
+            return jsonify({"success": False, "authenticated": False, "message": "Authentication required."}), 401
         clear_phase1_cache()
         return jsonify({"success": True, "contract_version": "phase1.v1", "message": "Phase 1 stock-analysis cache cleared."})
