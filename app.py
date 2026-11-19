@@ -148,11 +148,13 @@ def _run_market_scan():
     try:
         scanner = AngelScanner(batch_size=2, delay=0.1, max_workers=1)
         result = scanner.scan_market(limit=15, include_indices=False)
-        if result and result.get("success") and result.get("stocks"):
-            _publish_scan_payload(result, started)
-            return True
+        if result and result.get("success"):
+            if result.get("stocks"):
+                _publish_scan_payload(result, started)
+                return True
+            raise RuntimeError(result.get("message", "Broker and built-in fallback returned no stocks."))
 
-        # Run the Yahoo fallback only after the broker scan has fully returned.
+        # Run Yahoo fallback only when the broker scanner itself failed or raised.
         fallback_results = scanner._fallback_yfinance_scan(15)
         if fallback_results:
             _publish_scan_payload({
