@@ -116,14 +116,15 @@ class TechnicalAnalyzer:
 
     def ema(self, period):
 
-        if len(self.df) == 0:
+        if len(self.df) < period:
             return 0.0
 
         ema_value = (
             self.df["Close"]
             .ewm(
                 span=period,
-                adjust=False
+                adjust=False,
+                min_periods=period
             )
             .mean()
             .iloc[-1]
@@ -229,7 +230,7 @@ class TechnicalAnalyzer:
 
         if len(self.df) < (period * 2):
             return {
-                "adx": 25.0,
+                "adx": 0.0,
                 "plus_di": 0.0,
                 "minus_di": 0.0,
             }
@@ -325,7 +326,7 @@ class TechnicalAnalyzer:
         minus_di_value = minus_di.iloc[-1]
 
         if pd.isna(adx_value):
-            adx_value = 25.0
+            adx_value = 0.0
 
         if pd.isna(plus_di_value):
             plus_di_value = 0.0
@@ -392,12 +393,10 @@ class TechnicalAnalyzer:
 
         current_volume = volume.iloc[-1]
 
-        average_volume = (
-            volume
-            .rolling(period)
-            .mean()
-            .iloc[-1]
-        )
+        # Compare today's volume with the previous completed sessions;
+        # do not dilute the baseline by including today's volume in itself.
+        prior_volume = volume.iloc[-(period + 1):-1]
+        average_volume = prior_volume.mean() if len(prior_volume) >= period else 0.0
 
         if (
             pd.isna(average_volume)
@@ -432,7 +431,7 @@ class TechnicalAnalyzer:
 
         window = self.df.tail(252)
 
-        if window.empty:
+        if len(window) < 252:
             return {
                 "52_week_high": 0.0,
                 "52_week_low": 0.0,
@@ -462,7 +461,8 @@ class TechnicalAnalyzer:
         ema200 = self.ema(200)
 
         if (
-            price > ema20
+            len(self.df) >= 200
+            and price > ema20
             and ema20 > ema50
             and ema50 > ema200
         ):
@@ -547,7 +547,7 @@ class TechnicalAnalyzer:
         if ema20 > ema50:
             score += 10
 
-        if ema50 > ema200:
+        if len(self.df) >= 200 and ema50 > ema200:
             score += 10
 
         # --------------------------------------------------------
