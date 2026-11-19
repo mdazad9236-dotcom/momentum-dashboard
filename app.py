@@ -20,6 +20,12 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
+
+@app.route("/health", methods=["GET"])
+def health_check():
+    """Lightweight process health endpoint; does not call external market APIs."""
+    return jsonify({"status": "ok", "service": "x10-market-dashboard"}), 200
+
 angel_service = AngelOneService()
 stock_service = StockService()
 instrument_manager = AngelInstrumentManager()
