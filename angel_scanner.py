@@ -144,7 +144,9 @@ class AngelScanner:
             "symbol": symbol, "token": str(token or ""), "name": name, "price": analysis.get("price", 0),
             "technical_score": analysis.get("technical_score", 0), "x10_score": x10.get("x10_score", 0),
             "base_x10_score": x10.get("base_x10_score", 0),
-            "success_probability": x10.get("x10_score", 0), "signal": x10.get("signal", "AVOID"),
+            "success_probability": None,
+            "probability_status": x10.get("probability_status", "NOT CALIBRATED - X10 SCORE IS NOT A WIN PROBABILITY"),
+            "decision_status": x10.get("decision_status", "NOT ACTIONABLE"), "signal": x10.get("signal", "AVOID"),
             "early_momentum_score": x10.get("early_momentum_score", 0),
             "momentum_stage": x10.get("momentum_stage", "NOT EARLY"),
             "early_momentum_reasons": x10.get("early_momentum_reasons", []),
@@ -190,7 +192,7 @@ class AngelScanner:
     @staticmethod
     def _yahoo_candidate(symbol):
         try:
-            history = yf.Ticker(f"{symbol}.NS").history(period="6mo", interval="1d", auto_adjust=False)
+            history = yf.Ticker(f"{symbol}.NS").history(period="1y", interval="1d", auto_adjust=False)
             if history is None or history.empty:
                 return None
             analysis = TechnicalAnalyzer(history).calculate()
@@ -202,7 +204,9 @@ class AngelScanner:
             return {
                 "symbol": symbol, "token": "", "name": symbol, "price": analysis.get("price", 0),
                 "technical_score": analysis.get("technical_score", 0), "x10_score": x10.get("x10_score", 0),
-                "base_x10_score": x10.get("base_x10_score", 0), "success_probability": x10.get("x10_score", 0),
+                "base_x10_score": x10.get("base_x10_score", 0), "success_probability": None,
+                "probability_status": x10.get("probability_status", "NOT CALIBRATED - X10 SCORE IS NOT A WIN PROBABILITY"),
+                "decision_status": x10.get("decision_status", "NOT ACTIONABLE"),
                 "signal": x10.get("signal", "AVOID"), "early_momentum_score": x10.get("early_momentum_score", 0),
                 "momentum_stage": x10.get("momentum_stage", "NOT EARLY"),
                 "early_momentum_reasons": x10.get("early_momentum_reasons", []),
@@ -347,4 +351,4 @@ class AngelScanner:
         indices = self._get_index_snapshots() if include_indices else []
         elapsed = round(time.time() - start, 2)
         gc.collect()
-        return {"success": True, "count": len(top_results), "scanned": len(selected), "successful": len(top_results), "manual_count": len(manual_stocks), "time_seconds": elapsed, "stocks": top_results + manual_stocks, "top_opportunities": top_results, "indices": indices}
+        return {"success": True, "count": len(top_results), "scanned": len(selected), "successful": len(top_results), "manual_count": len(manual_stocks), "time_seconds": elapsed, "stocks": top_results, "manual_stocks": manual_stocks, "top_opportunities": top_results, "indices": indices}
