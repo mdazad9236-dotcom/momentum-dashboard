@@ -62,9 +62,11 @@ class AngelScanner:
         elif stage == "BUILDING MOMENTUM":
             rank += 2
         if signal == "STRONG BUY":
-            rank += 3
+            rank += 15
         elif signal == "BUY":
-            rank += 2
+            rank += 12
+        else:
+            rank -= 20
         if dont_chase:
             rank -= 18
         if rr < 1.5:
