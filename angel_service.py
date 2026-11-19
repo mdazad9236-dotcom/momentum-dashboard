@@ -152,25 +152,68 @@ class AngelOneService:
             return {"success": False, "message": result.get("message", "No LTP data returned by Angel One."), "data": result}
         return {"success": True, "exchange": exchange, "tradingsymbol": tradingsymbol, "symboltoken": str(symboltoken), "ltp": fetched[0].get("ltp", 0), "data": fetched[0]}
 
+    # Serialize and cache candle requests to avoid Angel One AB1021 rate limits.
+    _history_lock = threading.RLock()
+    _history_cache = {}
+    _history_cache_ttl = 900
+    _history_next_request_at = 0.0
+    _history_cooldown_until = 0.0
+
     def get_historical_data(self, symbol, token, days=200, interval="ONE_DAY", exchange="NSE"):
         login_result = self.login()
         if not login_result.get("success"):
             return {"success": False, "message": login_result.get("message", "Angel One login failed."), "data": []}
-        try:
-            # Keep interactive chart requests deliberately small. The dashboard
-            # only needs a compact working window, while large candle requests
-            # can trigger Angel One AB1021 rate limiting and make charts appear
-            # blank. The X10 calculations already use their own bounded windows.
+
+        cache_key = (str(exchange), str(token), str(interval), min(int(days), 120))
+        now = time.time()
+        with AngelOneService._history_lock:
+            cached = AngelOneService._history_cache.get(cache_key)
+            if cached and now - cached["saved_at"] < AngelOneService._history_cache_ttl:
+                return dict(cached["result"])
+            if now < AngelOneService._history_cooldown_until:
+                wait_left = round(AngelOneService._history_cooldown_until - now)
+                return {"success": False, "message": f"Angel One historical API cooling down after rate limit ({wait_left}s).", "data": []}
+
+            wait_for = AngelOneService._history_next_request_at - now
+            if wait_for > 0:
+                time.sleep(wait_for)
             requested_days = min(int(days), 120)
             to_date = datetime.now()
             from_date = to_date - timedelta(days=requested_days)
-            response = self.smart_api.getCandleData({"exchange": exchange, "symboltoken": str(token), "interval": interval, "fromdate": from_date.strftime("%Y-%m-%d %H:%M"), "todate": to_date.strftime("%Y-%m-%d %H:%M")})
-            if not response or not response.get("status"):
-                return {"success": False, "message": (response or {}).get("message", "Historical data request failed."), "data": []}
-            candles = response.get("data") or []
-            return {"success": bool(candles), "symbol": symbol, "token": str(token), "interval": interval, "count": len(candles), "data": candles, "message": "" if candles else "No historical candles found."}
-        except Exception as error:
-            return {"success": False, "message": f"Historical data request failed: {error}", "data": []}
+            try:
+                response = self.smart_api.getCandleData({
+                    "exchange": exchange, "symboltoken": str(token), "interval": interval,
+                    "fromdate": from_date.strftime("%Y-%m-%d %H:%M"),
+                    "todate": to_date.strftime("%Y-%m-%d %H:%M")
+                })
+                AngelOneService._history_next_request_at = time.time() + 1.2
+                if not response or not response.get("status"):
+                    message = (response or {}).get("message", "Historical data request failed.")
+                    error_code = str((response or {}).get("errorcode", ""))
+                    if error_code == "AB1021" or "too many requests" in str(message).lower():
+                        AngelOneService._history_cooldown_until = time.time() + 60
+                        print(f"[ANGEL HISTORY] Rate limit received for {symbol}; pausing candle requests for 60 seconds.")
+                    return {"success": False, "message": message, "data": [], "errorcode": error_code}
+                candles = response.get("data") or []
+                result = {
+                    "success": bool(candles), "symbol": symbol, "token": str(token),
+                    "interval": interval, "count": len(candles), "data": candles,
+                    "message": "" if candles else "No historical candles found."
+                }
+                if result["success"]:
+                    AngelOneService._history_cache[cache_key] = {"saved_at": time.time(), "result": result}
+                    if len(AngelOneService._history_cache) > 500:
+                        oldest = sorted(AngelOneService._history_cache.items(), key=lambda item: item[1]["saved_at"])[:100]
+                        for old_key, _ in oldest:
+                            AngelOneService._history_cache.pop(old_key, None)
+                return result
+            except Exception as error:
+                AngelOneService._history_next_request_at = time.time() + 1.2
+                message = str(error)
+                if "AB1021" in message or "too many requests" in message.lower():
+                    AngelOneService._history_cooldown_until = time.time() + 60
+                    print(f"[ANGEL HISTORY] Rate limit received for {symbol}; pausing candle requests for 60 seconds.")
+                return {"success": False, "message": f"Historical data request failed: {message}", "data": []}
 
     def get_historical_dataframe(self, symbol, token, days=100, interval="ONE_DAY", exchange="NSE"):
         result = self.get_historical_data(symbol, token, days, interval, exchange)
