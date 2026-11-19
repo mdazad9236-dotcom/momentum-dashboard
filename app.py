@@ -3,7 +3,6 @@ import threading
 import time
 import requests
 from functools import wraps
-from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import unquote
 
 from flask import Flask, jsonify, render_template, request, redirect, url_for, session
@@ -37,6 +36,7 @@ _scan_lock = threading.Lock()
 _scan_state = {"result": None, "updated_at": 0.0, "refreshing": False, "last_error": None}
 _index_lock = threading.Lock()
 _index_state = {"indices": [], "updated_at": 0.0, "refreshing": False, "last_error": None}
+_provider_refresh_lock = threading.Lock()
 
 def is_authenticated():
     return session.get("authenticated") is True
@@ -66,12 +66,16 @@ def clean_stock(stock):
     return {field: stock.get(field, 0) for field in fields}
 
 def _run_index_refresh():
+    # Serialize all provider work so index requests cannot overlap stock scans.
+    if not _provider_refresh_lock.acquire(blocking=False):
+        return False
     with _index_lock:
         if _index_state["refreshing"]:
+            _provider_refresh_lock.release()
             return False
         _index_state["refreshing"] = True
     try:
-        scanner = AngelScanner(batch_size=5, delay=0.03, max_workers=5)
+        scanner = AngelScanner(batch_size=1, delay=0.1, max_workers=1)
         login = scanner.service.login()
         if not login.get("success"):
             raise RuntimeError(login.get("message", "Angel One login failed."))
@@ -95,6 +99,7 @@ def _run_index_refresh():
     finally:
         with _index_lock:
             _index_state["refreshing"] = False
+        _provider_refresh_lock.release()
 
 def _ensure_index_refresh(force=False):
     with _index_lock:
@@ -129,65 +134,46 @@ def _publish_scan_payload(result, started):
     return payload
 
 def _run_market_scan():
+    # A scan owns the provider lock until every provider call has finished.
+    # No timeout wrapper is used here: abandoned futures previously kept running
+    # after the app marked a scan complete, allowing overlapping scans to pile up.
+    if not _provider_refresh_lock.acquire(blocking=False):
+        return False
     with _scan_lock:
         if _scan_state["refreshing"]:
+            _provider_refresh_lock.release()
             return False
         _scan_state["refreshing"] = True
     started = time.time()
-    executor = ThreadPoolExecutor(max_workers=2)
     try:
-        scanner = AngelScanner(batch_size=3, delay=0.03, max_workers=3)
-        fallback_future = executor.submit(scanner._fallback_yfinance_scan, 15)
-        broker_future = executor.submit(lambda: scanner.scan_market(limit=15, include_indices=False))
-        fallback_published = False
-        try:
-            fallback_results = fallback_future.result(timeout=20)
-            if fallback_results:
-                _publish_scan_payload({
-                    "success": True,
-                    "message": "Live stock scan is running; showing X10 market-data candidates while broker data refreshes.",
-                    "stocks": fallback_results,
-                    "scanned": len(fallback_results),
-                    "successful": len(fallback_results),
-                    "data_source": "YAHOO FALLBACK",
-                }, started)
-                fallback_published = True
-        except Exception as error:
-            print("BACKGROUND FALLBACK SCAN ERROR:", error)
-        try:
-            result = broker_future.result(timeout=45)
-            if result and result.get("success") and result.get("stocks"):
-                _publish_scan_payload(result, started)
-            elif not fallback_published:
-                raise RuntimeError((result or {}).get("message", "Broker scanner returned no stocks."))
-        except Exception as error:
-            print("BACKGROUND X10 SCANNER ERROR:", error)
-            with _scan_lock:
-                _scan_state["last_error"] = str(error)
-            if not fallback_published:
-                try:
-                    late_fallback = fallback_future.result(timeout=20)
-                    if late_fallback:
-                        _publish_scan_payload({
-                            "success": True,
-                            "message": "Broker scan unavailable; showing X10 market-data candidates.",
-                            "stocks": late_fallback,
-                            "scanned": len(late_fallback),
-                            "successful": len(late_fallback),
-                            "data_source": "YAHOO FALLBACK",
-                        }, started)
-                except Exception as fallback_error:
-                    print("BACKGROUND LATE FALLBACK ERROR:", fallback_error)
-        return True
+        scanner = AngelScanner(batch_size=2, delay=0.1, max_workers=1)
+        result = scanner.scan_market(limit=15, include_indices=False)
+        if result and result.get("success") and result.get("stocks"):
+            _publish_scan_payload(result, started)
+            return True
+
+        # Run the Yahoo fallback only after the broker scan has fully returned.
+        fallback_results = scanner._fallback_yfinance_scan(15)
+        if fallback_results:
+            _publish_scan_payload({
+                "success": True,
+                "message": "Broker scan unavailable; showing X10 market-data candidates.",
+                "stocks": fallback_results,
+                "scanned": len(fallback_results),
+                "successful": len(fallback_results),
+                "data_source": "YAHOO FALLBACK",
+            }, started)
+            return True
+        raise RuntimeError((result or {}).get("message", "No stocks returned by broker or fallback scan."))
     except Exception as error:
         print("BACKGROUND X10 SCANNER ERROR:", error)
         with _scan_lock:
             _scan_state["last_error"] = str(error)
         return False
     finally:
-        executor.shutdown(wait=False, cancel_futures=False)
         with _scan_lock:
             _scan_state["refreshing"] = False
+        _provider_refresh_lock.release()
 
 def _ensure_scan_refresh(force=False):
     with _scan_lock:
