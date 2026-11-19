@@ -173,15 +173,17 @@ class AngelScanner:
         if not stocks:
             return []
         results = []
-        with ThreadPoolExecutor(max_workers=min(self.max_workers, len(stocks))) as executor:
-            futures = [executor.submit(self.analyze_stock, stock) for stock in stocks]
-            for future in as_completed(futures):
-                try:
-                    result = future.result()
-                    if result:
-                        results.append(result)
-                except Exception as error:
-                    print(f"[BATCH] ERROR: {error}")
+        # Keep historical API calls sequential; the service enforces a global
+        # request interval and caches successful candle responses.
+        for stock in stocks:
+            try:
+                result = self.analyze_stock(stock)
+                if result:
+                    results.append(result)
+            except Exception as error:
+                print(f"[BATCH] ERROR: {error}")
+            if self.delay:
+                time.sleep(self.delay)
         gc.collect()
         return results
 
@@ -255,22 +257,7 @@ class AngelScanner:
             high = float(q.get("high", 0) or 0)
             low = float(q.get("low", 0) or 0)
             support, resistance = low, high
-            try:
-                history = self.service.get_historical_data(item["name"], item["token"], days=45, interval="ONE_DAY", exchange=item["exchange"])
-                candles = history.get("data", []) if history.get("success") else []
-                recent = [c for c in candles[-20:] if isinstance(c, (list, tuple)) and len(c) >= 5]
-                lows = [float(c[3]) for c in recent]
-                highs = [float(c[2]) for c in recent]
-                if price <= 0 and recent:
-                    price = float(recent[-1][4])
-                    if len(recent) >= 2:
-                        close = float(recent[-2][4])
-                    change = price - close if close else 0
-                    change_pct = change / close * 100 if close else 0
-                support = min(lows) if lows else support
-                resistance = max(highs) if highs else resistance
-            except Exception as error:
-                print(f"[INDEX-HISTORY] {item['name']} ERROR: {error}")
+            # Live quote high/low are sufficient here; avoid eight extra candle calls per refresh.
             if price > 0 and support <= 0:
                 support = price * 0.99
             if price > 0 and resistance <= price:
