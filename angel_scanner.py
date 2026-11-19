@@ -231,7 +231,7 @@ class AngelScanner:
     def _fallback_yfinance_scan(self, limit=15):
         symbols = FALLBACK_STOCKS[:max(1, int(limit))]
         results = []
-        with ThreadPoolExecutor(max_workers=min(4, len(symbols))) as executor:
+        with ThreadPoolExecutor(max_workers=min(2, len(symbols))) as executor:
             futures = [executor.submit(self._yahoo_candidate, symbol) for symbol in symbols]
             for future in as_completed(futures):
                 result = future.result()
