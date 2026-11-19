@@ -75,7 +75,7 @@ def _run_index_refresh():
             return False
         _index_state["refreshing"] = True
     try:
-        scanner = AngelScanner(batch_size=1, delay=0.1, max_workers=1)
+        scanner = AngelScanner(batch_size=1, delay=1.1, max_workers=1)
         login = scanner.service.login()
         if not login.get("success"):
             raise RuntimeError(login.get("message", "Angel One login failed."))
@@ -146,15 +146,13 @@ def _run_market_scan():
         _scan_state["refreshing"] = True
     started = time.time()
     try:
-        scanner = AngelScanner(batch_size=2, delay=0.1, max_workers=1)
+        scanner = AngelScanner(batch_size=1, delay=1.1, max_workers=1)
         result = scanner.scan_market(limit=15, include_indices=False)
-        if result and result.get("success"):
-            if result.get("stocks"):
-                _publish_scan_payload(result, started)
-                return True
-            raise RuntimeError(result.get("message", "Broker and built-in fallback returned no stocks."))
+        if result and result.get("success") and result.get("stocks"):
+            _publish_scan_payload(result, started)
+            return True
 
-        # Run Yahoo fallback only when the broker scanner itself failed or raised.
+        # Rate-limited or empty broker scans fall back to bounded Yahoo candidates.
         fallback_results = scanner._fallback_yfinance_scan(15)
         if fallback_results:
             _publish_scan_payload({
