@@ -137,8 +137,8 @@ def _run_market_scan():
     executor = ThreadPoolExecutor(max_workers=2)
     try:
         scanner = AngelScanner(batch_size=3, delay=0.03, max_workers=3)
-        fallback_future = executor.submit(scanner._fallback_yfinance_scan, 6)
-        broker_future = executor.submit(lambda: scanner.scan_market(limit=12, include_indices=False))
+        fallback_future = executor.submit(scanner._fallback_yfinance_scan, 15)
+        broker_future = executor.submit(lambda: scanner.scan_market(limit=15, include_indices=False))
         fallback_published = False
         try:
             fallback_results = fallback_future.result(timeout=20)
