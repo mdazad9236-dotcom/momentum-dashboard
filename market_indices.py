@@ -177,13 +177,14 @@ def build_index_snapshot(name, price, support=0, resistance=0, change=0, change_
             "support_2": targets["support_2"],
         },
         "breakout_confirmation": 0 if is_volatility else targets["breakout_confirmation"],
-        "entry_zone": {
+    }
+    if not is_volatility:
+        snapshot["entry_zone"] = {
             "low": entry_low,
             "high": entry_high,
             "type": "PULLBACK WATCH ZONE",
             "note": "Indicative 0.3%–0.8% pullback band; wait for price-hold confirmation. Not an automatic entry signal.",
-        },
-    }
+        }
     if is_volatility:
         snapshot["volatility_read"] = bias_data.get("volatility_read", "STABLE")
         snapshot["volatility_note"] = "India VIX measures expected volatility; it is not a directional equity-index signal."
