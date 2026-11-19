@@ -204,14 +204,38 @@ class X10Engine:
         # decision-quality modifier rather than replacing the X10 methodology.
         x10_score = round((base_score * 0.75) + (early["score"] * 0.25))
         signal = self.get_signal(x10_score)
+        rr_value = float(plan.get("risk_reward_value", 0) or 0)
+        valid_levels = (
+            float(plan.get("entry", 0) or 0) > float(plan.get("stop_loss", 0) or 0) > 0
+            and float(plan.get("target_1", 0) or 0) > float(plan.get("entry", 0) or 0)
+            and float(plan.get("risk", 0) or 0) > 0
+            and float(plan.get("reward", 0) or 0) > 0
+        )
+        # Hard gates: momentum score cannot override an unsafe trade plan.
+        if not valid_levels:
+            signal = "AVOID - INVALID TRADE PLAN"
+        elif plan["dont_chase"]:
+            signal = "WAIT / DON'T CHASE"
+        elif rr_value < 1.5:
+            signal = "WATCH - WEAK R:R"
+        elif x10_score < 70:
+            signal = self.get_signal(x10_score)
+        elif rr_value < 2.0:
+            signal = "BUY"
+        elif x10_score >= 80 and plan.get("setup_quality") == "GOOD":
+            signal = "STRONG BUY"
+        else:
+            signal = "BUY"
 
         validation = []
         if early["stage"] in ("EARLY ACCELERATION", "BUILDING MOMENTUM"):
             validation.append("EARLY MOMENTUM")
-        if plan["risk_reward_value"] >= 1.5:
+        if valid_levels and rr_value >= 1.5:
             validation.append("R:R VALID")
         else:
             validation.append("WEAK R:R")
+        if not valid_levels:
+            validation.append("INVALID TRADE LEVELS")
         if plan["dont_chase"]:
             validation.append("DON'T CHASE")
         if x10_score < 60:
@@ -222,17 +246,18 @@ class X10Engine:
         if early["stage"] == "NOT EARLY": risks.append("Momentum is not early-stage")
         if float(analysis.get("rsi", 50) or 50) > 72: risks.append("RSI is extended")
         if float(analysis.get("volume_ratio", 0) or 0) < 1.0: risks.append("Volume confirmation is weak")
-        if plan["risk_reward_value"] < 1.5: risks.append("Risk/reward is below preferred threshold")
+        if rr_value < 1.5: risks.append("Risk/reward is below preferred 1:1.5 minimum")
+        if not valid_levels: risks.append("Entry, stop-loss or target levels are invalid")
         if plan["dont_chase"]: risks.append("Price has moved beyond the planned chase zone")
         why_not_buy = "; ".join(risks[:3]) if risks else "No major validation warning"
 
-        if plan["dont_chase"] and signal in ("STRONG BUY", "BUY"):
-            signal = "WAIT / DON'T CHASE"
-
+        decision_status = "ACTIONABLE" if signal in ("STRONG BUY", "BUY") else "NOT ACTIONABLE"
         return {
             "x10_score": max(0, min(int(x10_score), 100)),
             "base_x10_score": base_score,
             "signal": signal,
+            "decision_status": decision_status,
+            "probability_status": "NOT CALIBRATED - X10 SCORE IS NOT A WIN PROBABILITY",
             "early_momentum_score": early["score"],
             "momentum_stage": early["stage"],
             "early_momentum_reasons": early["reasons"],
