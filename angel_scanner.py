@@ -228,7 +228,7 @@ class AngelScanner:
             print(f"[FALLBACK] {symbol} ERROR: {error}")
             return None
 
-    def _fallback_yfinance_scan(self, limit=6):
+    def _fallback_yfinance_scan(self, limit=15):
         symbols = FALLBACK_STOCKS[:max(1, int(limit))]
         results = []
         with ThreadPoolExecutor(max_workers=min(4, len(symbols))) as executor:
@@ -305,7 +305,7 @@ class AngelScanner:
     def scan_market(self, limit=30, include_indices=True):
         start = time.time()
         requested_limit = max(1, int(limit))
-        scan_limit = min(requested_limit, 6)
+        scan_limit = min(requested_limit, 15)
 
         login = self.service.login()
         if not login.get("success"):
@@ -345,7 +345,7 @@ class AngelScanner:
             if self.delay:
                 time.sleep(self.delay)
         results = self._rank_results(results)
-        top_results = results[:5]
+        top_results = results[:15]
 
         analyzed_symbols = {str(item.get("symbol", "")).upper() for item in results}
         manual_stocks = []
